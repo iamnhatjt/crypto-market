@@ -12,7 +12,11 @@ export interface CoinMarketResponse {
   image: string;
   current_price: number;
   market_cap: number;
-  market_cap_rank: number;
+  /**
+   * Nullable. Verified against the live API: `order=market_cap_asc` returns
+   * coins such as namecoin with `market_cap_rank: null` and `market_cap: 0`.
+   */
+  market_cap_rank: number | null;
   price_change_percentage_24h: number | null;
 }
 
@@ -24,7 +28,7 @@ export interface Coin {
   image: string;
   currentPrice: number;
   marketCap: number;
-  marketCapRank: number;
+  marketCapRank: number | null;
   priceChange24h: number | null;
 }
 

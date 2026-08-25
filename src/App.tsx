@@ -62,7 +62,9 @@ function App() {
    * list so searching does not appear to change your position in the market.
    */
   const rankRange = useMemo(() => {
-    const ranks = coins.map((coin) => coin.marketCapRank).filter((rank) => Number.isFinite(rank));
+    const ranks = coins
+      .map((coin) => coin.marketCapRank)
+      .filter((rank): rank is number => typeof rank === 'number' && Number.isFinite(rank));
 
     return ranks.length === 0
       ? null
@@ -197,6 +199,7 @@ function App() {
             page={page}
             hasNextPage={hasNextPage}
             rankRange={rankRange}
+            coinCount={coins.length}
             disabled={loading}
             onPageChange={goToPage}
           />

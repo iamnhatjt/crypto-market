@@ -51,9 +51,17 @@ function CoinCard({ coin }: CoinCardProps) {
           </p>
         </div>
 
-        <span className="ml-auto shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/60 dark:text-slate-300">
-          #{coin.marketCapRank}
-        </span>
+        {/* Coins at the bottom of the market have no rank; render nothing
+            rather than a dangling "#". */}
+        {coin.marketCapRank !== null && (
+          <span
+            data-testid="coin-rank"
+            title={`Market cap rank ${coin.marketCapRank}`}
+            className="ml-auto shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700/60 dark:text-slate-300"
+          >
+            #{coin.marketCapRank}
+          </span>
+        )}
       </header>
 
       <div className="flex flex-wrap items-baseline justify-between gap-2">

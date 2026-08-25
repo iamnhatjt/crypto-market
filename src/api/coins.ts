@@ -25,7 +25,7 @@ function toCoin(raw: CoinMarketResponse): Coin {
     image: raw.image,
     currentPrice: raw.current_price,
     marketCap: raw.market_cap,
-    marketCapRank: raw.market_cap_rank,
+    marketCapRank: typeof raw.market_cap_rank === 'number' ? raw.market_cap_rank : null,
     priceChange24h:
       typeof raw.price_change_percentage_24h === 'number' ? raw.price_change_percentage_24h : null,
   };

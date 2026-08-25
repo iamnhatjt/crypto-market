@@ -9,11 +9,35 @@ interface PaginationProps {
    * short final page would make arithmetic lie.
    */
   rankRange: { first: number; last: number } | null;
+  /** Coins on the page, used as the summary when none of them carry a rank. */
+  coinCount: number;
   disabled?: boolean;
   onPageChange: (page: number) => void;
 }
 
-function Pagination({ page, hasNextPage, rankRange, disabled = false, onPageChange }: PaginationProps) {
+function Pagination({
+  page,
+  hasNextPage,
+  rankRange,
+  coinCount,
+  disabled = false,
+  onPageChange,
+}: PaginationProps) {
+  /*
+   * Ranks are the most useful summary, but coins at the bottom of the market
+   * have none. An absent rank range must not be mistaken for an absent page —
+   * that read "No coins on this page." above 50 rendered coins.
+   */
+  let summary: string;
+
+  if (coinCount === 0) {
+    summary = 'No coins on this page.';
+  } else if (rankRange !== null) {
+    summary = `Ranks ${rankRange.first}\u2013${rankRange.last} by market cap.`;
+  } else {
+    summary = `Showing ${coinCount} coins.`;
+  }
+
   const buttonClasses =
     'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:ring-slate-100/10';
 
@@ -23,11 +47,7 @@ function Pagination({ page, hasNextPage, rankRange, disabled = false, onPageChan
       aria-label="Market pages"
       className="flex flex-wrap items-center justify-between gap-3"
     >
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        {rankRange === null
-          ? 'No coins on this page.'
-          : `Ranks ${rankRange.first}\u2013${rankRange.last} by market cap.`}
-      </p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{summary}</p>
 
       <div className="flex items-center gap-2">
         <button
