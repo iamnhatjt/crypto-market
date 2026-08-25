@@ -59,3 +59,61 @@ export type MarketsOrder = `${SortField}_${SortDirection}`;
 
 /** Direction of a coin's 24h move, used for colour and iconography. */
 export type Trend = 'up' | 'down' | 'flat';
+
+/**
+ * Wire shape of `/coins/{id}`.
+ *
+ * Differs from `/coins/markets` in ways worth spelling out: `image` is an object
+ * rather than a URL string, `market_cap_rank` sits at the top level, and the
+ * monetary fields are dicts keyed by currency. All verified against the live API.
+ */
+export interface CoinDetailResponse {
+  id: string;
+  symbol: string;
+  name: string;
+  image?: { thumb?: string; small?: string; large?: string };
+  market_cap_rank: number | null;
+  description?: { en?: string };
+  links?: { homepage?: string[] };
+  market_data?: {
+    current_price?: { usd?: number | null };
+    high_24h?: { usd?: number | null };
+    low_24h?: { usd?: number | null };
+    market_cap?: { usd?: number | null };
+    total_volume?: { usd?: number | null };
+    ath?: { usd?: number | null };
+    ath_date?: { usd?: string | null };
+    atl?: { usd?: number | null };
+    atl_date?: { usd?: string | null };
+    price_change_percentage_24h?: number | null;
+    price_change_percentage_7d?: number | null;
+    circulating_supply?: number | null;
+    total_supply?: number | null;
+    max_supply?: number | null;
+  };
+}
+
+/** Domain model for the detail page. Every optional wire field lands as null. */
+export interface CoinDetail {
+  id: string;
+  symbol: string;
+  name: string;
+  image: string | null;
+  marketCapRank: number | null;
+  description: string;
+  homepage: string | null;
+  currentPrice: number | null;
+  high24h: number | null;
+  low24h: number | null;
+  marketCap: number | null;
+  totalVolume: number | null;
+  ath: number | null;
+  athDate: string | null;
+  atl: number | null;
+  atlDate: string | null;
+  priceChange24h: number | null;
+  priceChange7d: number | null;
+  circulatingSupply: number | null;
+  totalSupply: number | null;
+  maxSupply: number | null;
+}

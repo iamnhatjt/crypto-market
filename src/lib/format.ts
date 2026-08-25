@@ -84,3 +84,35 @@ export function formatCompactUsd(value: number | null | undefined): string {
     maximumFractionDigits: 1,
   }).format(value);
 }
+
+/** Whole-number counts with thousands separators: supplies, holder counts. */
+export function formatSupply(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return PLACEHOLDER;
+  }
+
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
+}
+
+/**
+ * Date only — the time of an all-time high years ago is noise, and omitting it
+ * keeps the stat tile to one line.
+ */
+export function formatDate(iso: string | null | undefined): string {
+  if (iso === null || iso === undefined || iso.trim() === '') {
+    return PLACEHOLDER;
+  }
+
+  const parsed = new Date(iso);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return PLACEHOLDER;
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(parsed);
+}

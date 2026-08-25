@@ -303,9 +303,9 @@ export async function mockSearchFlow(
  * The negative lookahead excludes the markets list, and requiring `?` or
  * end-of-string after the id excludes the nested chart path.
  */
-export const COIN_DETAIL_ROUTE = /\/api\/v3\/coins\/(?!markets)[^/?]+(\?|$)/;
+const COIN_DETAIL_ROUTE = /\/api\/v3\/coins\/(?!markets)[^/?]+(\?|$)/;
 
-export interface DetailMockState {
+interface DetailMockState {
   requestedIds: string[];
   /** Stop failing and start serving the fixture. */
   recover: () => void;
