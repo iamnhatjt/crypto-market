@@ -7,29 +7,39 @@ import ThemeToggle from './components/ThemeToggle';
 import EmptyState from './components/states/EmptyState';
 import ErrorState from './components/states/ErrorState';
 import SkeletonGrid from './components/states/SkeletonGrid';
-import { FIRST_PAGE } from './api/coins';
+import { DEFAULT_ORDER, FIRST_PAGE } from './api/coins';
 import { config } from './config/env';
 import { useCoins } from './hooks/useCoins';
 import { useTheme } from './hooks/useTheme';
 import { filterCoins, sortCoins } from './lib/sort';
-import { SortDirection, SortField } from './types/coin';
+import { MarketsOrder, SortDirection, SortField, SortScope } from './types/coin';
 
 function App() {
   const { theme, toggleTheme } = useTheme();
 
   const [page, setPage] = useState(FIRST_PAGE);
-  const { coins, loading, error, hasNextPage, retry, refresh } = useCoins(page);
+  /**
+   * The ordering actually sent to CoinGecko. Only market cap can be ordered
+   * server-side, so this changes when the user sorts by market cap and is left
+   * alone otherwise — switching to a client-side field should not refetch.
+   */
+  const [apiOrder, setApiOrder] = useState<MarketsOrder>(DEFAULT_ORDER);
+  const { coins, loading, error, hasNextPage, retry, refresh } = useCoins(page, apiOrder);
 
   const [query, setQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('market_cap');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  // Filtering and sorting are cheap over 20 coins, but memoising keeps the
-  // memoised CoinCard children from re-rendering on unrelated state changes.
-  const visibleCoins = useMemo(
-    () => sortCoins(filterCoins(coins, query), sortField, sortDirection),
-    [coins, query, sortField, sortDirection]
-  );
+  const sortScope: SortScope = sortField === 'market_cap' ? 'market' : 'page';
+
+  // Filtering is always local. Sorting is only local for price and 24h change:
+  // market cap arrives already ordered by the API, and re-sorting it here would
+  // reshuffle one page using data the server ordered across the whole market.
+  const visibleCoins = useMemo(() => {
+    const filtered = filterCoins(coins, query);
+
+    return sortField === 'market_cap' ? filtered : sortCoins(filtered, sortField, sortDirection);
+  }, [coins, query, sortField, sortDirection]);
 
   // Exactly one of these is true at a time; order encodes the priority.
   const showError = error !== null;
@@ -61,6 +71,42 @@ function App() {
     // A new page is new content, so start reading it from the top.
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
+
+  /** A different global ordering makes the current page number meaningless. */
+  const applyApiOrder = useCallback(
+    (order: MarketsOrder) => {
+      if (order === apiOrder) {
+        return;
+      }
+
+      setApiOrder(order);
+      setPage(FIRST_PAGE);
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    },
+    [apiOrder]
+  );
+
+  const handleSortFieldChange = useCallback(
+    (field: SortField) => {
+      setSortField(field);
+
+      if (field === 'market_cap') {
+        applyApiOrder(`market_cap_${sortDirection}` as MarketsOrder);
+      }
+    },
+    [applyApiOrder, sortDirection]
+  );
+
+  const handleSortDirectionChange = useCallback(
+    (direction: SortDirection) => {
+      setSortDirection(direction);
+
+      if (sortField === 'market_cap') {
+        applyApiOrder(`market_cap_${direction}` as MarketsOrder);
+      }
+    },
+    [applyApiOrder, sortField]
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50">
@@ -105,8 +151,9 @@ function App() {
             <SortControls
               field={sortField}
               direction={sortDirection}
-              onFieldChange={setSortField}
-              onDirectionChange={setSortDirection}
+              scope={sortScope}
+              onFieldChange={handleSortFieldChange}
+              onDirectionChange={handleSortDirectionChange}
               disabled={controlsDisabled}
             />
           </div>

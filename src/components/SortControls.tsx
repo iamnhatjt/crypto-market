@@ -1,9 +1,15 @@
 import React from 'react';
-import { SortDirection, SortField } from '../types/coin';
+import { SortDirection, SortField, SortScope } from '../types/coin';
 
 interface SortControlsProps {
   field: SortField;
   direction: SortDirection;
+  /**
+   * Whether the API resolves this sort ('market') or it is applied locally to
+   * the loaded page ('page'). CoinGecko cannot order by price or 24h change, so
+   * those are page-scoped and the difference is shown rather than hidden.
+   */
+  scope: SortScope;
   onFieldChange: (field: SortField) => void;
   onDirectionChange: (direction: SortDirection) => void;
   disabled?: boolean;
@@ -23,6 +29,7 @@ const DIRECTION_OPTIONS: Array<{ value: SortDirection; label: string; hint: stri
 function SortControls({
   field,
   direction,
+  scope,
   onFieldChange,
   onDirectionChange,
   disabled = false,
@@ -76,6 +83,18 @@ function SortControls({
           );
         })}
       </div>
+
+      <p
+        data-testid="sort-scope"
+        title={
+          scope === 'market'
+            ? 'CoinGecko orders this server-side across every coin it tracks.'
+            : 'CoinGecko cannot order by this field, so it is sorted on the coins currently loaded.'
+        }
+        className="text-xs text-slate-500 dark:text-slate-400"
+      >
+        {scope === 'market' ? 'across the whole market' : 'within this page only'}
+      </p>
     </div>
   );
 }

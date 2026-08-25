@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { coinsCacheKey, fetchCoins } from '../api/coins';
+import { coinsCacheKey, DEFAULT_ORDER, fetchCoins } from '../api/coins';
 import { toErrorMessage } from '../api/client';
 import { config } from '../config/env';
 import { clearCache, readCache, writeCache } from '../lib/cache';
-import { Coin } from '../types/coin';
+import { Coin, MarketsOrder } from '../types/coin';
 
 interface UseCoinsResult {
   coins: Coin[];
@@ -22,7 +22,7 @@ interface UseCoinsResult {
   refresh: () => void;
 }
 
-export function useCoins(page: number): UseCoinsResult {
+export function useCoins(page: number, order: MarketsOrder = DEFAULT_ORDER): UseCoinsResult {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +39,15 @@ export function useCoins(page: number): UseCoinsResult {
   );
 
   const load = useCallback(
-    async (targetPage: number, options?: { force?: boolean; reset?: boolean }) => {
+    async (
+      targetPage: number,
+      targetOrder: MarketsOrder,
+      options?: { force?: boolean; reset?: boolean }
+    ) => {
       const force = options?.force ?? false;
       const reset = options?.reset ?? false;
 
-      const cacheKey = coinsCacheKey(targetPage);
+      const cacheKey = coinsCacheKey(targetPage, targetOrder);
 
       if (force) {
         clearCache(cacheKey);
@@ -69,7 +73,7 @@ export function useCoins(page: number): UseCoinsResult {
       setError(null);
 
       try {
-        const data = await fetchCoins(targetPage);
+        const data = await fetchCoins(targetPage, targetOrder);
 
         if (!mounted.current) {
           return;
@@ -98,16 +102,16 @@ export function useCoins(page: number): UseCoinsResult {
 
   useEffect(() => {
     mounted.current = true;
-    void load(page, { reset: true });
-  }, [page, load]);
+    void load(page, order, { reset: true });
+  }, [page, order, load]);
 
   const retry = useCallback(() => {
-    void load(page);
-  }, [load, page]);
+    void load(page, order);
+  }, [load, page, order]);
 
   const refresh = useCallback(() => {
-    void load(page, { force: true });
-  }, [load, page]);
+    void load(page, order, { force: true });
+  }, [load, page, order]);
 
   return { coins, loading, error, hasNextPage, retry, refresh };
 }

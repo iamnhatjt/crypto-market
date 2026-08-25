@@ -1,14 +1,16 @@
 import { apiClient } from './client';
 import { config } from '../config/env';
-import { Coin, CoinMarketResponse } from '../types/coin';
+import { Coin, CoinMarketResponse, MarketsOrder } from '../types/coin';
 
 const MARKETS_PATH = '/coins/markets';
 
 export const FIRST_PAGE = 1;
 
-/** Each page caches independently, so paging back is free. */
-export function coinsCacheKey(page: number): string {
-  return `crypto-dashboard:coins:markets:usd:page-${page}`;
+export const DEFAULT_ORDER: MarketsOrder = 'market_cap_desc';
+
+/** Each page and ordering caches independently, so going back is free. */
+export function coinsCacheKey(page: number, order: MarketsOrder): string {
+  return `crypto-dashboard:coins:markets:usd:${order}:page-${page}`;
 }
 
 /** Wire format -> domain model. Keeps snake_case out of the components. */
@@ -34,10 +36,14 @@ function toCoin(raw: CoinMarketResponse): Coin {
  * duplicate requests at a rate-limited API. Keying by page means paging quickly
  * does not collapse two different pages into one request.
  */
-const inFlight = new Map<number, Promise<Coin[]>>();
+const inFlight = new Map<string, Promise<Coin[]>>();
 
-export async function fetchCoins(page: number = FIRST_PAGE): Promise<Coin[]> {
-  const pending = inFlight.get(page);
+export async function fetchCoins(
+  page: number = FIRST_PAGE,
+  order: MarketsOrder = DEFAULT_ORDER
+): Promise<Coin[]> {
+  const key = `${order}:${page}`;
+  const pending = inFlight.get(key);
 
   if (pending) {
     return pending;
@@ -47,7 +53,7 @@ export async function fetchCoins(page: number = FIRST_PAGE): Promise<Coin[]> {
     .get<CoinMarketResponse[]>(MARKETS_PATH, {
       params: {
         vs_currency: 'usd',
-        order: 'market_cap_desc',
+        order,
         per_page: config.perPage,
         page,
         sparkline: false,
@@ -61,10 +67,10 @@ export async function fetchCoins(page: number = FIRST_PAGE): Promise<Coin[]> {
       return response.data.map(toCoin);
     })
     .finally(() => {
-      inFlight.delete(page);
+      inFlight.delete(key);
     });
 
-  inFlight.set(page, request);
+  inFlight.set(key, request);
 
   return request;
 }

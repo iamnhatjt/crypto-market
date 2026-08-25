@@ -31,6 +31,19 @@ export interface Coin {
 /** Which field the grid is ordered by. */
 export type SortField = 'market_cap' | 'price' | 'change';
 
+/**
+ * `order` values CoinGecko's /coins/markets actually honours.
+ *
+ * Verified against the live API: it answers 200 with plain market-cap ordering
+ * for unsupported values such as `price_desc` or `percent_change_24h_desc`
+ * rather than erroring, so sending one would fail silently. This union exists
+ * to make that impossible to do by accident.
+ */
+export type MarketsOrder = 'market_cap_desc' | 'market_cap_asc';
+
+/** Whether a sort is resolved by the API or locally over the loaded page. */
+export type SortScope = 'market' | 'page';
+
 export type SortDirection = 'asc' | 'desc';
 
 /** Direction of a coin's 24h move, used for colour and iconography. */
