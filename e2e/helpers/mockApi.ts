@@ -5,6 +5,8 @@ import {
   makeCoins,
   MarketCoinFixture,
   pagedFixtures,
+  searchIndex,
+  searchIndexFor,
 } from '../fixtures/coins';
 
 /** Matches the CoinGecko markets endpoint regardless of query string. */
@@ -192,6 +194,93 @@ export async function mockCoinsSized(
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(makeCoins(startIndex + 1, count)),
+    });
+  });
+
+  return state;
+}
+
+/** CoinGecko's keyword endpoint. It returns identities only - no prices. */
+export const SEARCH_ROUTE = '**/api/v3/search?*';
+
+export interface SearchFlowState {
+  /** Queries that reached /search, in order. */
+  searchQueries: string[];
+  /** Each `ids=` hydration request, as the list of ids asked for. */
+  hydratedIds: string[][];
+  /** Plain paged market requests (no `ids`), as page numbers. */
+  marketPages: number[];
+}
+
+/**
+ * Simulate the full two-step search: /search resolves a keyword to coin ids,
+ * then /coins/markets?ids=... hydrates those ids with prices.
+ *
+ * The same route also keeps serving the ordinary paged list when no `ids` are
+ * present, so browse and search modes can be exercised in one test.
+ */
+export async function mockSearchFlow(
+  page: Page,
+  options?: { searchStatus?: number; delayMs?: number }
+): Promise<SearchFlowState> {
+  const state: SearchFlowState = { searchQueries: [], hydratedIds: [], marketPages: [] };
+
+  await page.route(SEARCH_ROUTE, async (route) => {
+    const query = new URL(route.request().url()).searchParams.get('query') ?? '';
+    state.searchQueries.push(query);
+
+    if (options?.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+    }
+
+    if (options?.searchStatus && options.searchStatus >= 400) {
+      return route.fulfill({
+        status: options.searchStatus,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'search failed' }),
+      });
+    }
+
+    const coins = searchIndexFor(query).map((coin) => ({
+      id: coin.id,
+      name: coin.name,
+      symbol: coin.symbol.toUpperCase(),
+      market_cap_rank: coin.market_cap_rank,
+    }));
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ coins, exchanges: [], icos: [], categories: [], nfts: [] }),
+    });
+  });
+
+  await page.route(MARKETS_ROUTE, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const ids = params.get('ids');
+
+    if (ids !== null) {
+      const wanted = ids.split(',').filter(Boolean);
+      state.hydratedIds.push(wanted);
+
+      const hydrated = searchIndex
+        .filter((coin) => wanted.includes(coin.id))
+        .sort((a, b) => b.market_cap - a.market_cap);
+
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(hydrated),
+      });
+    }
+
+    const requestedPage = Number(params.get('page') ?? '1');
+    state.marketPages.push(requestedPage);
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(pagedFixtures[requestedPage] ?? []),
     });
   });
 

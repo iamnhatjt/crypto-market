@@ -81,7 +81,7 @@ function buildPage(
 }
 
 /** A full second page — ranks 21-40. Exactly PER_PAGE long, so more pages follow. */
-const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
+export const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
   [
     ['ethereum-classic', 'etc', 'Ethereum Classic', 24.11, 1.2],
     ['filecoin', 'fil', 'Filecoin', 5.42, -2.1],
@@ -201,4 +201,26 @@ export function makeMixedRankCoins(count: number): MarketCoinFixture[] {
       price_change_percentage_24h: 0.5,
     };
   });
+}
+
+/**
+ * Stands in for "every coin CoinGecko knows about" when simulating /search.
+ *
+ * Pages 1 and 2 together give 40 coins spanning both pages, so a test can prove
+ * that search reaches beyond the page currently on screen.
+ */
+export const searchIndex: MarketCoinFixture[] = [...coinsFixture, ...coinsPage2Fixture];
+
+/** The same name-or-symbol matching CoinGecko's /search performs server-side. */
+export function searchIndexFor(query: string): MarketCoinFixture[] {
+  const needle = query.trim().toLowerCase();
+
+  if (needle === '') {
+    return [];
+  }
+
+  return searchIndex.filter(
+    (coin) =>
+      coin.name.toLowerCase().includes(needle) || coin.symbol.toLowerCase().includes(needle)
+  );
 }
