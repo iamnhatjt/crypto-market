@@ -1,4 +1,3 @@
-import React from 'react';
 
 interface EmptyStateProps {
   /** The active search query; empty when the API itself returned no coins. */

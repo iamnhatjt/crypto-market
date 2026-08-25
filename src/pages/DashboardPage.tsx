@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import CoinGrid from '../components/CoinGrid';
 import Pagination from '../components/Pagination';
 import ThemeToggle from '../components/ThemeToggle';
@@ -14,6 +14,7 @@ import { useCoins } from '../hooks/useCoins';
 import { useCoinSearch } from '../hooks/useCoinSearch';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { MarketsOrder, SortDirection, SortField } from '../types/coin';
+import { CONTROL_BUTTON } from '../components/controlStyles';
 
 /** Long enough to skip intermediate keystrokes, short enough to feel immediate. */
 const SEARCH_DEBOUNCE_MS = 400;
@@ -159,7 +160,7 @@ function DashboardPage() {
                 disabled={loading}
                 aria-label="Refresh market data"
                 title="Refresh market data"
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:ring-slate-100/10"
+                className={CONTROL_BUTTON}
               >
                 {loading ? 'Refreshing…' : 'Refresh'}
               </button>

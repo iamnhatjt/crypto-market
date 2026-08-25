@@ -1,4 +1,3 @@
-import React from 'react';
 import CoinCard from './CoinCard';
 import { Coin } from '../types/coin';
 

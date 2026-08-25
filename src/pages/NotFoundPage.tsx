@@ -1,7 +1,7 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from '../components/ThemeToggle';
 import { useThemeControl } from '../components/ThemeProvider';
+import { CONTROL_BUTTON } from '../components/controlStyles';
 
 function NotFoundPage() {
   const { theme, toggleTheme } = useThemeControl();
@@ -31,7 +31,7 @@ function NotFoundPage() {
           <Link
             to="/"
             data-testid="back-to-list"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900/10 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+            className={CONTROL_BUTTON}
           >
             Back to the market list
           </Link>

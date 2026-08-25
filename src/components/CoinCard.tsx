@@ -1,28 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import TrendBadge from "./TrendBadge";
 import { Coin } from "../types/coin";
-import {
-  formatCompactUsd,
-  formatPercent,
-  formatPrice,
-  trendOf,
-} from "../lib/format";
+import { formatCompactUsd, formatPrice } from "../lib/format";
 
 interface CoinCardProps {
   coin: Coin;
 }
 
-const TREND_STYLES: Record<string, string> = {
-  up: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10",
-  down: "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10",
-  flat: "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/40",
-};
-
-const TREND_GLYPH: Record<string, string> = { up: "▲", down: "▼", flat: "" };
-
 function CoinCard({ coin }: CoinCardProps) {
-  const trend = trendOf(coin.priceChange24h);
-
   return (
     <Link
       to={`/coins/${coin.id}`}
@@ -84,20 +70,7 @@ function CoinCard({ coin }: CoinCardProps) {
             {formatPrice(coin.currentPrice)}
           </p>
 
-          <span
-            title="Change over the last 24 hours"
-            className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-sm font-semibold tabular-nums ${TREND_STYLES[trend]}`}
-          >
-            {/* Decorative arrow lives outside the value so the test id reads the number alone. */}
-            {TREND_GLYPH[trend] && (
-              <span aria-hidden="true" className="text-[0.65rem] leading-none">
-                {TREND_GLYPH[trend]}
-              </span>
-            )}
-            <span data-testid="coin-change" data-trend={trend}>
-              {formatPercent(coin.priceChange24h)}
-            </span>
-          </span>
+          <TrendBadge percent={coin.priceChange24h} testId="coin-change" showGlyph />
         </div>
 
         <footer className="mt-auto flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">

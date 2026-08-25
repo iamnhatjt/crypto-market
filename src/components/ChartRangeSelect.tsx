@@ -1,4 +1,3 @@
-import React from 'react';
 import { CHART_RANGES } from '../api/coinChart';
 import { ChartRange } from '../types/coin';
 

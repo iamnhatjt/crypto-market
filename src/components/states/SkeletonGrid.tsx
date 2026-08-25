@@ -1,4 +1,3 @@
-import React from 'react';
 import { GRID_CLASSES } from '../CoinGrid';
 
 interface SkeletonGridProps {

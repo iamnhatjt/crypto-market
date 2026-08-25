@@ -1,5 +1,5 @@
-import React from 'react';
 import { SortDirection, SortField } from '../types/coin';
+import { CONTROL_SELECT } from './controlStyles';
 
 interface SortControlsProps {
   field: SortField;
@@ -43,7 +43,7 @@ function SortControls({
         value={field}
         disabled={disabled}
         onChange={(event) => onFieldChange(event.target.value as SortField)}
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:ring-slate-100/10"
+        className={CONTROL_SELECT}
       >
         {FIELD_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>

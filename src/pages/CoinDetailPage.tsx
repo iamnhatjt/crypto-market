@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import ChartRangeSelect from '../components/ChartRangeSelect';
 import PriceChart from '../components/PriceChart';
 import StatGrid, { Stat } from '../components/StatGrid';
+import TrendBadge from '../components/TrendBadge';
 import ThemeToggle from '../components/ThemeToggle';
 import { useThemeControl } from '../components/ThemeProvider';
 import DetailSkeleton from '../components/states/DetailSkeleton';
@@ -16,15 +17,9 @@ import {
   formatPercent,
   formatPrice,
   formatSupply,
-  trendOf,
 } from '../lib/format';
 import { ChartRange, CoinDetail } from '../types/coin';
-
-const TREND_STYLES: Record<string, string> = {
-  up: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10',
-  down: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10',
-  flat: 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/40',
-};
+import { CONTROL_BUTTON } from '../components/controlStyles';
 
 function buildStats(detail: CoinDetail): Stat[] {
   return [
@@ -66,8 +61,6 @@ function CoinDetailPage() {
   const [range, setRange] = useState<ChartRange>(DEFAULT_RANGE);
   const chart = useCoinChart(coinId, range);
 
-  const trend = detail ? trendOf(detail.priceChange24h) : 'flat';
-
   return (
     <div
       data-testid="coin-detail-page"
@@ -78,7 +71,7 @@ function CoinDetailPage() {
           <Link
             to="/"
             data-testid="back-to-list"
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900/10 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className={CONTROL_BUTTON}
           >
             <span aria-hidden="true">←</span> All coins
           </Link>
@@ -136,14 +129,7 @@ function CoinDetailPage() {
                     >
                       {formatPrice(detail.currentPrice)}
                     </p>
-                    <span
-                      data-testid="coin-detail-change"
-                      data-trend={trend}
-                      title="Change over the last 24 hours"
-                      className={`rounded-md px-2 py-1 text-sm font-semibold tabular-nums ${TREND_STYLES[trend]}`}
-                    >
-                      {formatPercent(detail.priceChange24h)}
-                    </span>
+                    <TrendBadge percent={detail.priceChange24h} testId="coin-detail-change" />
                   </div>
                 </div>
               </section>

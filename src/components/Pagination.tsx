@@ -1,5 +1,5 @@
-import React from 'react';
 import PageSizeSelect from './PageSizeSelect';
+import { CONTROL_BUTTON } from './controlStyles';
 
 interface PaginationProps {
   page: number;
@@ -43,8 +43,6 @@ function Pagination({
     summary = `Showing ${coinCount} coins.`;
   }
 
-  const buttonClasses =
-    'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:ring-slate-100/10';
 
   return (
     <nav
@@ -62,7 +60,7 @@ function Pagination({
           data-testid="prev-page"
           onClick={() => onPageChange(page - 1)}
           disabled={disabled || page <= 1}
-          className={buttonClasses}
+          className={CONTROL_BUTTON}
         >
           <span aria-hidden="true">←</span> Previous
         </button>
@@ -81,7 +79,7 @@ function Pagination({
           data-testid="next-page"
           onClick={() => onPageChange(page + 1)}
           disabled={disabled || !hasNextPage}
-          className={buttonClasses}
+          className={CONTROL_BUTTON}
         >
           Next <span aria-hidden="true">→</span>
         </button>

@@ -1,4 +1,3 @@
-import React from 'react';
 
 export interface Stat {
   /** Becomes `data-testid="stat-{id}"`. */

@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { config } from '../config/env';
+import { CONTROL_SELECT } from './controlStyles';
 
 interface PageSizeSelectProps {
   value: number;
@@ -38,7 +39,7 @@ function PageSizeSelect({ value, onChange, disabled = false }: PageSizeSelectPro
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-medium text-slate-900 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:ring-slate-100/10"
+        className={CONTROL_SELECT}
       >
         {sizes.map((size) => (
           <option key={size} value={size}>

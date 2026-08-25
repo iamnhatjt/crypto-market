@@ -1,4 +1,3 @@
-import React from 'react';
 
 /** Mirrors the detail layout so the page does not jump when data lands. */
 function DetailSkeleton() {
