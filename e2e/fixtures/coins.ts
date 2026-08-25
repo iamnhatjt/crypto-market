@@ -139,3 +139,27 @@ export const coinsServerOrderedFixture: MarketCoinFixture[] = [
   coinsFixture[15], // shiba-inu — rank 16
   ...coinsFixture.filter((_, index) => ![7, 0, 15].includes(index)),
 ];
+
+/**
+ * Synthesise `count` coins starting at a given rank.
+ *
+ * Page-size tests need payloads of arbitrary length (10, 50, 100...), which a
+ * hand-written fixture cannot provide. Values are derived from the rank so every
+ * assertion stays deterministic.
+ */
+export function makeCoins(startRank: number, count: number): MarketCoinFixture[] {
+  return Array.from({ length: count }, (_, index) => {
+    const rank = startRank + index;
+
+    return {
+      id: `synthetic-${rank}`,
+      symbol: `s${rank}`,
+      name: `Synthetic ${rank}`,
+      image: icon('64748b'),
+      current_price: Number((1000 / rank).toFixed(4)),
+      market_cap: 1_000_000_000_000 - rank * 1_000_000,
+      market_cap_rank: rank,
+      price_change_percentage_24h: rank % 3 === 0 ? null : Number(((rank % 7) - 3).toFixed(2)),
+    };
+  });
+}

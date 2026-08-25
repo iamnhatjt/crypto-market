@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import {
   coinsFixture,
   coinsServerOrderedFixture,
+  makeCoins,
   MarketCoinFixture,
   pagedFixtures,
 } from '../fixtures/coins';
@@ -154,6 +155,43 @@ export async function mockCoinsOrdered(page: Page): Promise<{ requests: MarketsR
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(body),
+    });
+  });
+
+  return state;
+}
+
+export interface SizedRequest {
+  page: number;
+  perPage: number;
+}
+
+/**
+ * Serve exactly `per_page` coins for whatever size is requested, recording each
+ * request. `totalAvailable` caps the pool so a short final page can be tested at
+ * any page size.
+ */
+export async function mockCoinsSized(
+  page: Page,
+  totalAvailable: number = Number.POSITIVE_INFINITY
+): Promise<{ requests: SizedRequest[] }> {
+  const state = { requests: [] as SizedRequest[] };
+
+  await page.route(MARKETS_ROUTE, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const perPage = Number(params.get('per_page') ?? '20');
+    const requestedPage = Number(params.get('page') ?? '1');
+
+    state.requests.push({ page: requestedPage, perPage });
+
+    const startIndex = (requestedPage - 1) * perPage;
+    const remaining = Math.max(0, totalAvailable - startIndex);
+    const count = Math.min(perPage, remaining);
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(makeCoins(startIndex + 1, count)),
     });
   });
 
