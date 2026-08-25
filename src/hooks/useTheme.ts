@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 
 export type Theme = 'light' | 'dark';
 
-export const THEME_STORAGE_KEY = 'crypto-dashboard:theme';
+/**
+ * Also hardcoded in `public/index.html`, which reads this key before first
+ * paint so dark mode does not flash white. The two cannot share a constant —
+ * the inline script runs before any bundle loads — so renaming this means
+ * renaming it there too. `e2e/theme.spec.ts` pins the literal to catch drift.
+ */
+const THEME_STORAGE_KEY = 'crypto-dashboard:theme';
 
 function readStoredTheme(): Theme | null {
   try {
@@ -21,7 +27,7 @@ function prefersDark(): boolean {
 }
 
 /** An explicit choice wins; otherwise fall back to the OS preference. */
-export function resolveInitialTheme(): Theme {
+function resolveInitialTheme(): Theme {
   return readStoredTheme() ?? (prefersDark() ? 'dark' : 'light');
 }
 

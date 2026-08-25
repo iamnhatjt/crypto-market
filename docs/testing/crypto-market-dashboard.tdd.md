@@ -134,6 +134,34 @@ the second run could not bind port 3000 while the first run's CRA dev server was
 shutting down, so nothing was being served. No application defect; the same suite passed
 immediately against a stable server. Worth knowing when reading CI logs.
 
+### Task 7 — Dead-code cleanup (refactor, no RED gate)
+
+Ran `npx knip@5` to find unused code rather than eyeballing it.
+
+- **Unused files:** none. **Unused dependencies:** none. **Unresolved imports:** none.
+- **Unused exports:** 8, all cleaned by dropping the `export` keyword — they were
+  consumed inside their own module, not by anything else:
+  `DEFAULT_BASE_URL`, `DEFAULT_PER_PAGE`, `DEFAULT_CACHE_TTL_MS`,
+  `DEFAULT_REQUEST_TIMEOUT_MS`, `AppConfig` (`src/config/env.ts`),
+  `CACHE_TTL_MS` (`src/lib/cache.ts`), `THEME_STORAGE_KEY` and
+  `resolveInitialTheme` (`src/hooks/useTheme.ts`).
+
+Two files have no inbound reference but were deliberately kept:
+`src/react-app-env.d.ts` is recreated by `react-scripts` on every start, and
+`public/robots.txt` is fetched by crawlers at its URL rather than imported.
+
+`THEME_STORAGE_KEY` deserved more than deletion. The same literal is hardcoded in
+`public/index.html`, whose pre-paint script cannot import a constant because it runs
+before any bundle loads. Deleting the constant would have removed the only in-code
+record of that coupling, so instead both sides now cross-reference each other and a
+regression guard pins the literal — renaming it now fails a test rather than silently
+reintroducing the light-mode flash.
+
+- **Command:** `npx playwright test`
+- **Output:** `97 passed, 5 skipped (17.3s)`
+- **Also verified:** `npx tsc --noEmit` clean; `Compiled successfully.`; `knip` reports
+  nothing.
+
 ---
 
 ## Test specification
@@ -181,6 +209,7 @@ immediately against a stable server. Worth knowing when reading CI logs.
 | 39 | The request carries vs_currency=usd, market_cap_desc, per_page=20, page=1, sparkline=false | `api-request.spec.ts:requests the top 20 USD markets` | e2e | PASS |
 | 40 | `per_page` is always a positive integer, never NaN | `api-request.spec.ts:sends a numeric per_page` | e2e | PASS |
 | 41 | No API key header is sent when no key is configured | `api-request.spec.ts:omits the API key header entirely` | e2e | PASS |
+| 42 | The theme is stored under the exact key the pre-paint script reads | `theme.spec.ts:persists the theme under the key the pre-paint script reads` | e2e | PASS |
 
 ---
 
@@ -189,7 +218,7 @@ immediately against a stable server. Worth knowing when reading CI logs.
 No line-coverage number is reported. Playwright is a black-box browser runner, and
 `react-scripts` provides no instrumentation hook for it without ejecting or adding a
 second runner — which would defeat the single-runner decision. Coverage is instead stated
-as behavioural coverage: the 41 guarantees above map onto every numbered requirement in
+as behavioural coverage: the 42 guarantees above map onto every numbered requirement in
 `docs/INTERVIEW_TASK.md`, including all four listed edge cases.
 
 **Deliberate gaps:**
@@ -217,8 +246,9 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
 
 - **RED:** 43/43 Playwright tests failed on `[data-testid=coin-card]` not found, before
   any feature code existed (`a26ca25`).
-- **GREEN:** 95 passed / 5 skipped after implementation, the rounding fix and the
-  environment-configuration refactor, with `tsc --noEmit` clean and `npm run build`
-  compiling.
+- **GREEN:** 97 passed / 5 skipped after implementation, the rounding fix, the
+  environment-configuration refactor and the dead-code cleanup, with `tsc --noEmit`
+  clean, `npm run build` compiling and `knip` reporting no unused files, exports or
+  dependencies.
 - **Bug found and fixed under test:** 24h changes that round to zero rendered as red
   losses; found by driving the live API, fixed RED→GREEN (`caae21d`).

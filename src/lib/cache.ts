@@ -12,7 +12,7 @@
  */
 import { config } from '../config/env';
 
-export const CACHE_TTL_MS = config.cacheTtlMs;
+const CACHE_TTL_MS = config.cacheTtlMs;
 
 interface CacheEntry<T> {
   storedAt: number;

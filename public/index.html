@@ -13,6 +13,7 @@
     <title>Crypto Market Dashboard</title>
     <script>
       // Apply the stored theme before first paint so dark mode does not flash white.
+      // The key below must match THEME_STORAGE_KEY in src/hooks/useTheme.ts.
       (function () {
         try {
           var stored = window.localStorage.getItem('crypto-dashboard:theme');

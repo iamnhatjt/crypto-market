@@ -34,12 +34,12 @@ function optional(raw: string | undefined): string | null {
   return raw === undefined || raw.trim() === '' ? null : raw.trim();
 }
 
-export const DEFAULT_BASE_URL = 'https://api.coingecko.com/api/v3';
-export const DEFAULT_PER_PAGE = 20;
-export const DEFAULT_CACHE_TTL_MS = 60_000;
-export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const DEFAULT_BASE_URL = 'https://api.coingecko.com/api/v3';
+const DEFAULT_PER_PAGE = 20;
+const DEFAULT_CACHE_TTL_MS = 60_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
-export interface AppConfig {
+interface AppConfig {
   /** CoinGecko API root. Point at `https://pro-api.coingecko.com/api/v3` for a Pro key. */
   baseUrl: string;
   /** Demo/Pro API key, or null to call the public endpoint unauthenticated. */

@@ -161,7 +161,7 @@ price movement.
 npm run test:e2e
 ```
 
-**95 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
+**97 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
 viewport-driven responsive tests, scoped to the desktop project so they run once.
 
 | Spec | Covers |
@@ -172,7 +172,7 @@ viewport-driven responsive tests, scoped to the desktop project so they run once
 | `responsive.spec.ts` | 1/2/3/4 columns at 390/768/1024/1440px; no horizontal overflow at 320px |
 | `caching.spec.ts` | One request on load; reload served from cache; refresh bypasses it; TTL expiry re-fetches |
 | `api-request.spec.ts` | The outgoing query matches the brief; `per_page` is never `NaN`; no API key header when unset |
-| `theme.spec.ts` | Dark mode toggle, round trip, and persistence across reload |
+| `theme.spec.ts` | Dark mode toggle, round trip, persistence across reload, and the storage key the pre-paint script depends on |
 
 The fixture in `e2e/fixtures/coins.ts` is shaped so each edge case has exactly one
 unambiguous answer — a unique highest price, a unique biggest gainer, one coin with a
@@ -199,7 +199,7 @@ Beyond the suite, the app was verified against the live API: one network request
 ## Testing notes
 
 A full TDD evidence report — user journeys, RED/GREEN output for each stage, the
-41 behavioural guarantees and the known gaps — lives in
+42 behavioural guarantees and the known gaps — lives in
 [`docs/testing/crypto-market-dashboard.tdd.md`](docs/testing/crypto-market-dashboard.tdd.md).
 
 ## Licence
