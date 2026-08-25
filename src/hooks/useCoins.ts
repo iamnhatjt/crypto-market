@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { COINS_CACHE_KEY, fetchCoins } from '../api/coins';
+import { coinsCacheKey, fetchCoins } from '../api/coins';
 import { toErrorMessage } from '../api/client';
+import { config } from '../config/env';
 import { clearCache, readCache, writeCache } from '../lib/cache';
 import { Coin } from '../types/coin';
 
@@ -8,16 +9,24 @@ interface UseCoinsResult {
   coins: Coin[];
   loading: boolean;
   error: string | null;
-  /** Re-read through the cache. */
+  /**
+   * Whether another page is likely to exist. CoinGecko does not return a total
+   * count on this endpoint, so a full page is treated as "there may be more"
+   * and a short page as the end. Knowing the true total would cost an extra
+   * request for information the user does not see.
+   */
+  hasNextPage: boolean;
+  /** Re-read the current page through the cache. */
   retry: () => void;
-  /** Skip the cache and go back to the network. */
+  /** Skip the cache and go back to the network for the current page. */
   refresh: () => void;
 }
 
-export function useCoins(): UseCoinsResult {
+export function useCoins(page: number): UseCoinsResult {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasNextPage, setHasNextPage] = useState(false);
 
   // Guards against setting state after the component has gone away.
   const mounted = useRef(true);
@@ -29,61 +38,76 @@ export function useCoins(): UseCoinsResult {
     []
   );
 
-  const load = useCallback(async (options?: { force?: boolean }) => {
-    const force = options?.force ?? false;
+  const load = useCallback(
+    async (targetPage: number, options?: { force?: boolean; reset?: boolean }) => {
+      const force = options?.force ?? false;
+      const reset = options?.reset ?? false;
 
-    if (force) {
-      clearCache(COINS_CACHE_KEY);
-    } else {
-      const cached = readCache<Coin[]>(COINS_CACHE_KEY);
+      const cacheKey = coinsCacheKey(targetPage);
 
-      if (cached) {
-        setCoins(cached);
-        setError(null);
-        setLoading(false);
-        return;
-      }
-    }
+      if (force) {
+        clearCache(cacheKey);
+      } else {
+        const cached = readCache<Coin[]>(cacheKey);
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = await fetchCoins();
-
-      if (!mounted.current) {
-        return;
+        if (cached) {
+          setCoins(cached);
+          setHasNextPage(cached.length >= config.perPage);
+          setError(null);
+          setLoading(false);
+          return;
+        }
       }
 
-      writeCache(COINS_CACHE_KEY, data);
-      setCoins(data);
+      // Changing page shows different data, so clear the grid and show
+      // skeletons. A refresh of the same page keeps the current rows visible.
+      if (reset) {
+        setCoins([]);
+      }
+
+      setLoading(true);
       setError(null);
-    } catch (caught) {
-      if (!mounted.current) {
-        return;
-      }
 
-      setCoins([]);
-      setError(toErrorMessage(caught));
-    } finally {
-      if (mounted.current) {
-        setLoading(false);
+      try {
+        const data = await fetchCoins(targetPage);
+
+        if (!mounted.current) {
+          return;
+        }
+
+        writeCache(cacheKey, data);
+        setCoins(data);
+        setHasNextPage(data.length >= config.perPage);
+        setError(null);
+      } catch (caught) {
+        if (!mounted.current) {
+          return;
+        }
+
+        setCoins([]);
+        setHasNextPage(false);
+        setError(toErrorMessage(caught));
+      } finally {
+        if (mounted.current) {
+          setLoading(false);
+        }
       }
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     mounted.current = true;
-    void load();
-  }, [load]);
+    void load(page, { reset: true });
+  }, [page, load]);
 
   const retry = useCallback(() => {
-    void load();
-  }, [load]);
+    void load(page);
+  }, [load, page]);
 
   const refresh = useCallback(() => {
-    void load({ force: true });
-  }, [load]);
+    void load(page, { force: true });
+  }, [load, page]);
 
-  return { coins, loading, error, retry, refresh };
+  return { coins, loading, error, hasNextPage, retry, refresh };
 }

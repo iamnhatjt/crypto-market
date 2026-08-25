@@ -22,8 +22,9 @@ React, TypeScript, Tailwind CSS and axios, against the free
 | **Card content** | Icon, name, symbol, USD price, 24h change (green up / red down), market cap and rank |
 | **Search** | Filters by name *or* symbol, case- and whitespace-insensitive |
 | **Sort** | Market cap, price or 24h change, ascending or descending |
+| **Pagination** | Server-side: each page is its own request, separately cached |
 | **Edge cases** | Loading skeletons, error state with retry, empty search state, network-failure recovery |
-| **Bonus** | Dark/light theme toggle (persisted), and a Playwright E2E suite |
+| **Bonus** | Server-side pagination, dark/light theme toggle (persisted), and a Playwright E2E suite |
 
 ## Getting started
 
@@ -98,7 +99,7 @@ src/
 │   ├── format.ts        price and percentage formatting, trend derivation
 │   └── sort.ts          pure filterCoins / sortCoins
 ├── components/
-│   ├── CoinCard, CoinGrid, SearchBar, SortControls, ThemeToggle
+│   ├── CoinCard, CoinGrid, SearchBar, SortControls, ThemeToggle, Pagination
 │   └── states/          SkeletonGrid, ErrorState, EmptyState
 └── App.tsx              owns search/sort state, picks which state to render
 e2e/                     Playwright specs, fixtures and helpers
@@ -149,6 +150,19 @@ real loss; "no data" is not "flat", so nulls sort last in *both* directions.
 **No debounce on search.** Filtering 20 in-memory coins is synchronous. A debounce would
 only add latency between keystroke and result.
 
+**Pagination is server-side, and search is scoped to the loaded page.** Each page is a
+separate `page=N` request with its own cache entry, so paging back is instant and no
+request is repeated. The honest tradeoff: search and sort only see the page you are on.
+Making search global would mean either fetching every coin up front (thousands of rows
+for a 20-row view) or calling CoinGecko's search endpoint, which returns a different
+shape with no prices. Rather than hide that, the UI states it — the pager reports the
+rank range you are viewing, and an empty search result says which page it searched.
+
+**"Next" is enabled by page length, not a total count.** CoinGecko does not return a
+total on this endpoint. A full page means "there may be more"; a short page means the
+end. Showing a true page count would cost an extra request for a number the user does
+not act on.
+
 ## Testing
 
 Playwright is the only test runner, and every spec mocks the network with `page.route()`
@@ -161,7 +175,7 @@ price movement.
 npm run test:e2e
 ```
 
-**97 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
+**131 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
 viewport-driven responsive tests, scoped to the desktop project so they run once.
 
 | Spec | Covers |
@@ -172,6 +186,7 @@ viewport-driven responsive tests, scoped to the desktop project so they run once
 | `responsive.spec.ts` | 1/2/3/4 columns at 390/768/1024/1440px; no horizontal overflow at 320px |
 | `caching.spec.ts` | One request on load; reload served from cache; refresh bypasses it; TTL expiry re-fetches |
 | `api-request.spec.ts` | The outgoing query matches the brief; `per_page` is never `NaN`; no API key header when unset |
+| `pagination.spec.ts` | Pager state and disabled edges; `page=N` reaches the API; short final page ends paging; pages cache independently; a failing page recovers via retry; search/sort scoped to the page; rank-range summary; scroll-to-top |
 | `theme.spec.ts` | Dark mode toggle, round trip, persistence across reload, and the storage key the pre-paint script depends on |
 
 The fixture in `e2e/fixtures/coins.ts` is shaped so each edge case has exactly one
@@ -185,8 +200,11 @@ Beyond the suite, the app was verified against the live API: one network request
 
 - **Coin detail page with a price chart** — needs a router and a chart library, and the
   `/coins/{id}/market_chart` endpoint. The biggest missing feature.
-- **Pagination or infinite scroll** — the brief pins the list at 20, so paging would be
-  speculative until the page size becomes a real requirement.
+- **Put the page number in the URL** — right now paging is component state, so a page
+  cannot be linked or survive a refresh. This needs either a router or `history.pushState`;
+  a router would land naturally alongside the detail page above.
+- **Global search across pages** — see the tradeoff note above. Would use CoinGecko's
+  `/search` endpoint plus a follow-up markets call to hydrate prices.
 - **Unit tests for `lib/`** — the pure functions are currently covered through the DOM.
   E2E proves the user-visible behaviour, but a Vitest layer over `format.ts` and
   `sort.ts` would pin edge cases faster than a browser round trip.
@@ -199,7 +217,7 @@ Beyond the suite, the app was verified against the live API: one network request
 ## Testing notes
 
 A full TDD evidence report — user journeys, RED/GREEN output for each stage, the
-42 behavioural guarantees and the known gaps — lives in
+50 behavioural guarantees and the known gaps — lives in
 [`docs/testing/crypto-market-dashboard.tdd.md`](docs/testing/crypto-market-dashboard.tdd.md).
 
 ## Licence

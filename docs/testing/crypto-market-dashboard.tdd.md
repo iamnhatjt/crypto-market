@@ -22,6 +22,7 @@ Node 26.5.0. No Jest/RTL — the CRA scaffolding for it was removed deliberately
 | 5 | As a crypto watcher on any device, I want the grid to reflow to my screen width, so that it is usable on a phone and dense on a desktop. | `e2e/responsive.spec.ts` |
 | 6 | As a crypto watcher, I want to switch between light and dark themes and have my choice remembered. | `e2e/theme.spec.ts` |
 | 7 | As a crypto watcher, I want repeat visits to reuse recently fetched data, so that the dashboard is instant and does not get rate-limited — while still being able to force a refresh. | `e2e/caching.spec.ts` |
+| 8 | As a crypto watcher, I want to page beyond the top 20, so that I can look further down the market without loading thousands of coins at once. | `e2e/pagination.spec.ts` |
 
 ---
 
@@ -162,6 +163,45 @@ reintroducing the light-mode flash.
 - **Also verified:** `npx tsc --noEmit` clean; `Compiled successfully.`; `knip` reports
   nothing.
 
+### Task 8 — Server-side pagination (RED → GREEN)
+
+The first change since the initial build with genuinely new user-visible behaviour, so a
+real RED gate applies.
+
+- **RED command:** `npx playwright test e2e/pagination.spec.ts --project=desktop-chromium`
+- **RED output:** `Running 13 tests` → `13 failed`, all `element(s) not found` on the
+  pager controls. Committed at `2c0f2a4` before any implementation existed.
+- **Implementation:** `fetchCoins(page)` with a per-page in-flight map and a per-page
+  cache key; `useCoins(page)` gaining `hasNextPage`; a new `Pagination` component; `App`
+  owning page state and scrolling to top on change.
+- **GREEN output:** `17 passed` on the spec, `131 passed, 5 skipped` on the full suite.
+- **Commit:** see below.
+
+A second RED→GREEN cycle followed inside the same task, again found by looking at the
+rendered page rather than the tests: with page 2 on screen the header still read
+"Top 20 cryptocurrencies" and the pager only said "Showing 20 coins".
+
+- **RED:** 4 failed / 13 passed — rank-range summary absent, header still claimed "Top 20"
+- **Fix:** the pager now reports `Ranks 21–40 by market cap`, derived from the fetched
+  coins' `marketCapRank` rather than from `page * perPage`, because arithmetic would
+  misreport a short final page. The header only claims "Top N" on page 1.
+- **GREEN:** `17 passed`
+
+One test was corrected rather than accommodated: `locator('header')` hit a strict-mode
+violation across 21 elements, because every `CoinCard` renders its own `<header>`.
+Retargeted at the `banner` landmark. Test defect, not a weakened guarantee.
+
+Two fixture exports (`coinsPage2Fixture`, `coinsPage3Fixture`) were flagged by knip after
+this task and made module-internal; they are consumed through `pagedFixtures`.
+
+**Live verification.** Paging was driven against the real CoinGecko API:
+
+| Step | Observed |
+|---|---|
+| Page 1 | first coin Bitcoin, rank #1 |
+| Next | first coin Bitcoin Cash, rank #21 — correct continuation |
+| Previous | back to Bitcoin, and pages requested were `1, 2` — no repeat request |
+
 ---
 
 ## Test specification
@@ -210,6 +250,14 @@ reintroducing the light-mode flash.
 | 40 | `per_page` is always a positive integer, never NaN | `api-request.spec.ts:sends a numeric per_page` | e2e | PASS |
 | 41 | No API key header is sent when no key is configured | `api-request.spec.ts:omits the API key header entirely` | e2e | PASS |
 | 42 | The theme is stored under the exact key the pre-paint script reads | `theme.spec.ts:persists the theme under the key the pre-paint script reads` | e2e | PASS |
+| 43 | The pager renders with page 1 active and previous disabled | `pagination.spec.ts:controls` | e2e | PASS |
+| 44 | Next requests `page=N` and swaps in that page's coins | `pagination.spec.ts:requests the next page` / `sends the requested page number` | e2e | PASS |
+| 45 | A short final page disables Next | `pagination.spec.ts:disables the next-page control on a short final page` | e2e | PASS |
+| 46 | Pages cache independently; 1→2→1 issues exactly two requests | `pagination.spec.ts:caches each page separately` | e2e | PASS |
+| 47 | A failing later page shows the error state and recovers on retry | `pagination.spec.ts:shows the error state when a later page fails` | e2e | PASS |
+| 48 | Search and sort apply to the loaded page; the query survives a page change; the empty state names the page | `pagination.spec.ts:interaction with search and sort` | e2e | PASS |
+| 49 | The pager reports the true market-cap rank range, including on a short page | `pagination.spec.ts:rank range summary` | e2e | PASS |
+| 50 | Changing page scrolls back to the top | `pagination.spec.ts:scrolls back to the top` | e2e | PASS |
 
 ---
 
@@ -218,7 +266,7 @@ reintroducing the light-mode flash.
 No line-coverage number is reported. Playwright is a black-box browser runner, and
 `react-scripts` provides no instrumentation hook for it without ejecting or adding a
 second runner — which would defeat the single-runner decision. Coverage is instead stated
-as behavioural coverage: the 42 guarantees above map onto every numbered requirement in
+as behavioural coverage: the 50 guarantees above map onto every numbered requirement in
 `docs/INTERVIEW_TASK.md`, including all four listed edge cases.
 
 **Deliberate gaps:**
@@ -231,8 +279,12 @@ as behavioural coverage: the 42 guarantees above map onto every numbered require
 - **Live API is not exercised by the suite.** By design — a live call cannot be asked for
   a 500 or a dropped connection, and would flake on rate limits. Live behaviour was
   verified manually instead, and that is what found the `-0.00%` bug.
-- **Coin detail page and pagination are not implemented**, so they are untested. Both are
-  listed as bonus items in the brief and called out in the README.
+- **Coin detail page is not implemented**, so it is untested. It is a bonus item in the
+  brief and called out in the README. Pagination *is* now implemented and covered.
+- **The page number is not in the URL**, so a page cannot be linked or survive a refresh.
+  Untested because unimplemented; noted in the README.
+- **Search is scoped to the loaded page**, by design. The suite asserts that scoping and
+  that the UI states it, rather than asserting a global search that does not exist.
 
 **No skipped or disabled tests.** The 5 reported skips are `responsive.spec.ts` opting out
 of the mobile project via `test.skip(({ isMobile }) => …)`, because those tests set their
@@ -246,9 +298,11 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
 
 - **RED:** 43/43 Playwright tests failed on `[data-testid=coin-card]` not found, before
   any feature code existed (`a26ca25`).
-- **GREEN:** 97 passed / 5 skipped after implementation, the rounding fix, the
-  environment-configuration refactor and the dead-code cleanup, with `tsc --noEmit`
-  clean, `npm run build` compiling and `knip` reporting no unused files, exports or
-  dependencies.
+- **GREEN:** 131 passed / 5 skipped after implementation, the rounding fix, the
+  environment-configuration refactor, the dead-code cleanup and server-side pagination,
+  with `tsc --noEmit` clean, `npm run build` compiling and `knip` reporting no unused
+  files, exports or dependencies.
+- **Second bug found by looking at the rendered page, fixed under test:** the header
+  claimed "Top 20" while showing ranks 21-40 (`RED 4 failed -> GREEN 17 passed`).
 - **Bug found and fixed under test:** 24h changes that round to zero rendered as red
   losses; found by driving the live API, fixed RED→GREEN (`caae21d`).

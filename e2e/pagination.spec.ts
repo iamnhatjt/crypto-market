@@ -180,3 +180,44 @@ test('scrolls back to the top when the page changes', async ({ page }) => {
 
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
+
+test.describe('rank range summary', () => {
+  /**
+   * Found by visual review: the header claimed "Top 20" while page 2 showed
+   * ranks 21-40. The pager must state where in the market you actually are.
+   */
+  test.beforeEach(async ({ page }) => {
+    await mockCoinsPaged(page);
+    await page.goto('/');
+    await expectCardCount(page, EXPECTED_COIN_COUNT);
+  });
+
+  test('summarises the rank range on the first page', async ({ page }) => {
+    await expect(page.getByTestId('pagination')).toContainText('Ranks 1\u201320');
+  });
+
+  test('summarises the rank range on a later page', async ({ page }) => {
+    await page.getByTestId('next-page').click();
+    await expect(card(page, 'ethereum-classic')).toBeVisible();
+
+    await expect(page.getByTestId('pagination')).toContainText('Ranks 21\u201340');
+  });
+
+  test('summarises a short final page correctly', async ({ page }) => {
+    await page.getByTestId('next-page').click();
+    await expect(page.getByTestId('page-indicator')).toContainText('2');
+    await page.getByTestId('next-page').click();
+    await expectCardCount(page, 7);
+
+    await expect(page.getByTestId('pagination')).toContainText('Ranks 41\u201347');
+  });
+
+  test('no longer claims "Top 20" once past the first page', async ({ page }) => {
+    await page.getByTestId('next-page').click();
+    await expect(card(page, 'ethereum-classic')).toBeVisible();
+
+    // Each coin card also renders a <header>, so target the page-level banner
+    // landmark rather than every header on the page.
+    await expect(page.getByRole('banner')).not.toContainText('Top 20');
+  });
+});

@@ -3,10 +3,12 @@ import React from 'react';
 interface EmptyStateProps {
   /** The active search query; empty when the API itself returned no coins. */
   query: string;
+  /** Search is scoped to the loaded page, so the message has to say which. */
+  page: number;
   onClear: () => void;
 }
 
-function EmptyState({ query, onClear }: EmptyStateProps) {
+function EmptyState({ query, page, onClear }: EmptyStateProps) {
   const searching = query.trim() !== '';
 
   return (
@@ -24,8 +26,9 @@ function EmptyState({ query, onClear }: EmptyStateProps) {
         </h2>
         <p className="break-words text-sm text-slate-500 dark:text-slate-400">
           {searching
-            ? `Nothing in the top 20 matches “${query}”. Try a different name or symbol.`
-            : 'CoinGecko returned an empty list. Try refreshing in a moment.'}
+            ? `Nothing on page ${page} matches “${query}”. Search covers the page you are
+               viewing — try another page, name or symbol.`
+            : 'CoinGecko returned an empty list for this page. Try refreshing in a moment.'}
         </p>
       </div>
 

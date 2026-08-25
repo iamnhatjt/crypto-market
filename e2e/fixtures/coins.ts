@@ -77,7 +77,7 @@ function buildPage(
 }
 
 /** A full second page — ranks 21-40. Exactly PER_PAGE long, so more pages follow. */
-export const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
+const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
   [
     ['ethereum-classic', 'etc', 'Ethereum Classic', 24.11, 1.2],
     ['filecoin', 'fil', 'Filecoin', 5.42, -2.1],
@@ -104,7 +104,7 @@ export const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
 );
 
 /** A SHORT third page — 7 coins. Fewer than PER_PAGE means this is the last page. */
-export const coinsPage3Fixture: MarketCoinFixture[] = buildPage(
+const coinsPage3Fixture: MarketCoinFixture[] = buildPage(
   [
     ['neo', 'neo', 'NEO', 11.24, 0.7],
     ['iota', 'iota', 'IOTA', 0.1823, -1.9],

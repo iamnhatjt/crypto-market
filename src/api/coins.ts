@@ -2,17 +2,14 @@ import { apiClient } from './client';
 import { config } from '../config/env';
 import { Coin, CoinMarketResponse } from '../types/coin';
 
-export const COINS_CACHE_KEY = 'crypto-dashboard:coins:markets:usd';
-
 const MARKETS_PATH = '/coins/markets';
 
-const MARKETS_PARAMS = {
-  vs_currency: 'usd',
-  order: 'market_cap_desc',
-  per_page: config.perPage,
-  page: 1,
-  sparkline: false,
-} as const;
+export const FIRST_PAGE = 1;
+
+/** Each page caches independently, so paging back is free. */
+export function coinsCacheKey(page: number): string {
+  return `crypto-dashboard:coins:markets:usd:page-${page}`;
+}
 
 /** Wire format -> domain model. Keeps snake_case out of the components. */
 function toCoin(raw: CoinMarketResponse): Coin {
@@ -30,21 +27,32 @@ function toCoin(raw: CoinMarketResponse): Coin {
 }
 
 /**
- * Coalesces concurrent callers onto a single request.
+ * Coalesces concurrent callers onto a single request, per page.
  *
  * React StrictMode mounts effects twice in development, and a user can click
  * refresh while a load is already running. Without this, both cases would fire
- * duplicate requests at a rate-limited API.
+ * duplicate requests at a rate-limited API. Keying by page means paging quickly
+ * does not collapse two different pages into one request.
  */
-let inFlight: Promise<Coin[]> | null = null;
+const inFlight = new Map<number, Promise<Coin[]>>();
 
-export async function fetchCoins(): Promise<Coin[]> {
-  if (inFlight) {
-    return inFlight;
+export async function fetchCoins(page: number = FIRST_PAGE): Promise<Coin[]> {
+  const pending = inFlight.get(page);
+
+  if (pending) {
+    return pending;
   }
 
-  inFlight = apiClient
-    .get<CoinMarketResponse[]>(MARKETS_PATH, { params: MARKETS_PARAMS })
+  const request = apiClient
+    .get<CoinMarketResponse[]>(MARKETS_PATH, {
+      params: {
+        vs_currency: 'usd',
+        order: 'market_cap_desc',
+        per_page: config.perPage,
+        page,
+        sparkline: false,
+      },
+    })
     .then((response) => {
       if (!Array.isArray(response.data)) {
         throw new Error('Unexpected response shape from CoinGecko.');
@@ -53,8 +61,10 @@ export async function fetchCoins(): Promise<Coin[]> {
       return response.data.map(toCoin);
     })
     .finally(() => {
-      inFlight = null;
+      inFlight.delete(page);
     });
 
-  return inFlight;
+  inFlight.set(page, request);
+
+  return request;
 }
