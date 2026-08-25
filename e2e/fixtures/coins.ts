@@ -123,3 +123,19 @@ export const pagedFixtures: Record<number, MarketCoinFixture[]> = {
   2: coinsPage2Fixture,
   3: coinsPage3Fixture,
 };
+
+/**
+ * A payload whose order does NOT match its own market_cap values.
+ *
+ * When sorting by market cap the app must render exactly what the API returned,
+ * because CoinGecko owns that ordering and it spans the whole market — a local
+ * re-sort would only reshuffle the current page and could disagree. Serving a
+ * deliberately "wrong-looking" order is what makes that assertable: a local
+ * sort would move `cardano` away from the front.
+ */
+export const coinsServerOrderedFixture: MarketCoinFixture[] = [
+  coinsFixture[7], // cardano  — rank 8, deliberately first
+  coinsFixture[0], // bitcoin  — rank 1
+  coinsFixture[15], // shiba-inu — rank 16
+  ...coinsFixture.filter((_, index) => ![7, 0, 15].includes(index)),
+];

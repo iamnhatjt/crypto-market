@@ -1,5 +1,10 @@
 import type { Page } from '@playwright/test';
-import { coinsFixture, MarketCoinFixture, pagedFixtures } from '../fixtures/coins';
+import {
+  coinsFixture,
+  coinsServerOrderedFixture,
+  MarketCoinFixture,
+  pagedFixtures,
+} from '../fixtures/coins';
 
 /** Matches the CoinGecko markets endpoint regardless of query string. */
 export const MARKETS_ROUTE = '**/api/v3/coins/markets*';
@@ -116,4 +121,41 @@ export async function mockPageTwoFailure(page: Page): Promise<{ recover: () => v
       failing = false;
     },
   };
+}
+
+export interface MarketsRequest {
+  page: number;
+  order: string;
+}
+
+/**
+ * Serve a payload that depends on the `order` param, recording every request.
+ *
+ * `market_cap_asc` returns a list whose order does not match its own market_cap
+ * values, so a test can prove the app renders the server's ordering rather than
+ * re-sorting locally.
+ */
+export async function mockCoinsOrdered(page: Page): Promise<{ requests: MarketsRequest[] }> {
+  const state = { requests: [] as MarketsRequest[] };
+
+  await page.route(MARKETS_ROUTE, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const requestedPage = Number(params.get('page') ?? '1');
+    const order = params.get('order') ?? '';
+
+    state.requests.push({ page: requestedPage, order });
+
+    const body =
+      order === 'market_cap_asc'
+        ? coinsServerOrderedFixture
+        : pagedFixtures[requestedPage] ?? [];
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  return state;
 }
