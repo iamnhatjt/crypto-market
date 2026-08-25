@@ -4,16 +4,19 @@
  * symbol, so that I can find one coin without scrolling.
  *
  * Journey 3
- * As a crypto watcher, I want to sort by price or 24h change in either
- * direction, so that I can see the biggest movers and the most valuable coins.
+ * As a crypto watcher, I want to sort in either direction, so that I can look
+ * at either end of the market.
+ *
+ * Search is server-side (see search-api.spec.ts) and so is sorting, so these
+ * exercise the user-visible outcome rather than any local filtering.
  */
 import { test, expect } from '@playwright/test';
-import { mockCoins } from './helpers/mockApi';
+import { mockSearchFlow } from './helpers/mockApi';
 import { EXPECTED_COIN_COUNT } from './fixtures/coins';
 import { card, expectCardCount, visibleCoinIds } from './helpers/dom';
 
 test.beforeEach(async ({ page }) => {
-  await mockCoins(page);
+  await mockSearchFlow(page);
   await page.goto('/');
   await expectCardCount(page, EXPECTED_COIN_COUNT);
 });
@@ -66,66 +69,40 @@ test.describe('search', () => {
 });
 
 test.describe('sort', () => {
-  test('orders by price descending, putting the most expensive coin first', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('price');
-    await page.getByTestId('sort-direction-desc').click();
-
-    const ids = await visibleCoinIds(page);
-    expect(ids[0]).toBe('bitcoin');
-    expect(ids[1]).toBe('wrapped-bitcoin');
-  });
-
-  test('orders by price ascending, putting the cheapest coin first', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('price');
-    await page.getByTestId('sort-direction-asc').click();
-
-    const ids = await visibleCoinIds(page);
-    expect(ids[0]).toBe('shiba-inu');
-  });
-
-  test('orders by 24h change descending, putting the biggest gainer first', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('change');
-    await page.getByTestId('sort-direction-desc').click();
-
-    const ids = await visibleCoinIds(page);
-    expect(ids[0]).toBe('avalanche-2');
-  });
-
-  test('orders by 24h change ascending, putting the biggest loser first', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('change');
-    await page.getByTestId('sort-direction-asc').click();
-
-    const ids = await visibleCoinIds(page);
-    expect(ids[0]).toBe('uniswap');
-  });
-
-  test('keeps coins with a missing 24h change last in both directions', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('change');
-
-    await page.getByTestId('sort-direction-desc').click();
-    let ids = await visibleCoinIds(page);
-    expect(ids[ids.length - 1]).toBe('stasis-eurs');
-
-    await page.getByTestId('sort-direction-asc').click();
-    ids = await visibleCoinIds(page);
-    expect(ids[ids.length - 1]).toBe('stasis-eurs');
-  });
-
-  test('falls back to market cap order when sorting is reset', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('price');
-    await page.getByTestId('sort-field').selectOption('market_cap');
-
+  test('orders by market cap descending by default', async ({ page }) => {
     const ids = await visibleCoinIds(page);
     expect(ids[0]).toBe('bitcoin');
     expect(ids[1]).toBe('ethereum');
+  });
+
+  test('reflects the selected direction', async ({ page }) => {
+    // What the reversed ordering actually renders is covered in
+    // sort-order.spec.ts, which mocks a payload that varies by `order`.
+    await page.getByTestId('sort-direction-asc').click();
+
+    await expect(page.getByTestId('sort-direction-asc')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('sort-direction-desc')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('offers volume as the only other field, matching the API', async ({ page }) => {
+    const values = await page
+      .getByTestId('sort-field')
+      .locator('option')
+      .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));
+
+    expect(values).toEqual(['market_cap', 'volume']);
   });
 });
 
 test('search and sort apply together', async ({ page }) => {
   await page.getByTestId('search-input').fill('bitcoin');
-  await page.getByTestId('sort-field').selectOption('price');
-  await page.getByTestId('sort-direction-asc').click();
+  await expectCardCount(page, 2);
 
-  const ids = await visibleCoinIds(page);
-  expect(ids).toEqual(['wrapped-bitcoin', 'bitcoin']);
+  await page.getByTestId('sort-field').selectOption('volume');
+
+  // Both the keyword and the ordering are resolved by the API; the grid renders
+  // whatever comes back for that combination.
+  await expectCardCount(page, 2);
+  await expect(card(page, 'bitcoin')).toBeVisible();
+  await expect(card(page, 'wrapped-bitcoin')).toBeVisible();
 });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toErrorMessage } from '../api/client';
 import { MIN_SEARCH_LENGTH, searchCacheKey, searchCoins } from '../api/search';
 import { readCache, writeCache } from '../lib/cache';
-import { Coin } from '../types/coin';
+import { Coin, MarketsOrder } from '../types/coin';
 
 interface UseCoinSearchResult {
   /** True once the query is long enough that search replaces the browse list. */
@@ -18,7 +18,7 @@ interface UseCoinSearchResult {
  *
  * @param query debounced query; anything shorter than MIN_SEARCH_LENGTH is a no-op
  */
-export function useCoinSearch(query: string): UseCoinSearchResult {
+export function useCoinSearch(query: string, order: MarketsOrder): UseCoinSearchResult {
   const active = query.length >= MIN_SEARCH_LENGTH;
 
   const [results, setResults] = useState<Coin[]>([]);
@@ -40,7 +40,7 @@ export function useCoinSearch(query: string): UseCoinSearchResult {
     []
   );
 
-  const run = useCallback(async (target: string) => {
+  const run = useCallback(async (target: string, targetOrder: MarketsOrder) => {
     latestQuery.current = target;
 
     if (target.length < MIN_SEARCH_LENGTH) {
@@ -50,7 +50,7 @@ export function useCoinSearch(query: string): UseCoinSearchResult {
       return;
     }
 
-    const cacheKey = searchCacheKey(target);
+    const cacheKey = searchCacheKey(target, targetOrder);
     const cached = readCache<Coin[]>(cacheKey);
 
     if (cached) {
@@ -64,7 +64,7 @@ export function useCoinSearch(query: string): UseCoinSearchResult {
     setError(null);
 
     try {
-      const found = await searchCoins(target);
+      const found = await searchCoins(target, targetOrder);
 
       // A newer query has since been requested; discard this response.
       if (!mounted.current || latestQuery.current !== target) {
@@ -90,12 +90,12 @@ export function useCoinSearch(query: string): UseCoinSearchResult {
 
   useEffect(() => {
     mounted.current = true;
-    void run(query);
-  }, [query, run]);
+    void run(query, order);
+  }, [query, order, run]);
 
   const retry = useCallback(() => {
-    void run(query);
-  }, [query, run]);
+    void run(query, order);
+  }, [query, order, run]);
 
   return { active, results, loading, error, retry };
 }

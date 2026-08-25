@@ -26,6 +26,7 @@ export function toCoin(raw: CoinMarketResponse): Coin {
     currentPrice: raw.current_price,
     marketCap: raw.market_cap,
     marketCapRank: typeof raw.market_cap_rank === 'number' ? raw.market_cap_rank : null,
+    totalVolume: typeof raw.total_volume === 'number' ? raw.total_volume : null,
     priceChange24h:
       typeof raw.price_change_percentage_24h === 'number' ? raw.price_change_percentage_24h : null,
   };

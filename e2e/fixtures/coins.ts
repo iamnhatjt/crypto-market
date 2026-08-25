@@ -83,7 +83,7 @@ function buildPage(
 }
 
 /** A full second page — ranks 21-40. Exactly PER_PAGE long, so more pages follow. */
-export const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
+const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
   [
     ['ethereum-classic', 'etc', 'Ethereum Classic', 24.11, 1.2],
     ['filecoin', 'fil', 'Filecoin', 5.42, -2.1],

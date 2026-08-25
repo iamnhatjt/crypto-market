@@ -7,14 +7,13 @@ import ThemeToggle from './components/ThemeToggle';
 import EmptyState from './components/states/EmptyState';
 import ErrorState from './components/states/ErrorState';
 import SkeletonGrid from './components/states/SkeletonGrid';
-import { DEFAULT_ORDER, FIRST_PAGE } from './api/coins';
+import { FIRST_PAGE } from './api/coins';
 import { config } from './config/env';
 import { useCoins } from './hooks/useCoins';
 import { useCoinSearch } from './hooks/useCoinSearch';
 import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { useTheme } from './hooks/useTheme';
-import { sortCoins } from './lib/sort';
-import { MarketsOrder, SortDirection, SortField, SortScope } from './types/coin';
+import { MarketsOrder, SortDirection, SortField } from './types/coin';
 
 /** Long enough to skip intermediate keystrokes, short enough to feel immediate. */
 const SEARCH_DEBOUNCE_MS = 400;
@@ -28,7 +27,15 @@ function App() {
    * server-side, so this changes when the user sorts by market cap and is left
    * alone otherwise — switching to a client-side field should not refetch.
    */
-  const [apiOrder, setApiOrder] = useState<MarketsOrder>(DEFAULT_ORDER);
+  const [sortField, setSortField] = useState<SortField>('market_cap');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  /**
+   * Every offered sort is one the API performs, so the ordering sent to
+   * CoinGecko is simply the current field and direction. No local sorting
+   * remains, in browse mode or in search results.
+   */
+  const apiOrder: MarketsOrder = `${sortField}_${sortDirection}`;
   /** How many coins to request per page. Part of the request, not a local slice. */
   const [pageSize, setPageSize] = useState(config.perPage);
   const { coins, loading, error, hasNextPage, retry, refresh } = useCoins(
@@ -43,10 +50,7 @@ function App() {
    * loaded list needed no debounce; issuing requests does.
    */
   const debouncedQuery = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
-  const search = useCoinSearch(debouncedQuery);
-
-  const [sortField, setSortField] = useState<SortField>('market_cap');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const search = useCoinSearch(debouncedQuery, apiOrder);
 
   // Search replaces the browse listing rather than filtering it: results are one
   // relevance-ranked set from the whole market, not a slice of a page.
@@ -56,29 +60,13 @@ function App() {
   const activeError = searchMode ? search.error : error;
   const activeRetry = searchMode ? search.retry : retry;
 
-  const sortScope: SortScope = searchMode
-    ? 'results'
-    : sortField === 'market_cap'
-      ? 'market'
-      : 'page';
 
-  /*
-   * Market cap while browsing is the only ordering the API resolves, and it
-   * arrives already sorted across the whole market — re-sorting it here would
-   * reshuffle one page using a narrower view of the data. Everything else,
-   * including market cap over search results, is sorted locally.
-   */
-  const visibleCoins = useMemo(() => {
-    const serverSorted = !searchMode && sortField === 'market_cap';
-
-    return serverSorted ? activeCoins : sortCoins(activeCoins, sortField, sortDirection);
-  }, [activeCoins, searchMode, sortField, sortDirection]);
 
   // Exactly one of these is true at a time; order encodes the priority.
   const showError = activeError !== null;
   const showSkeleton = !showError && activeLoading && activeCoins.length === 0;
-  const showEmpty = !showError && !showSkeleton && visibleCoins.length === 0;
-  const showGrid = !showError && !showSkeleton && visibleCoins.length > 0;
+  const showEmpty = !showError && !showSkeleton && activeCoins.length === 0;
+  const showGrid = !showError && !showSkeleton && activeCoins.length > 0;
 
   // The search box must stay usable even when the current view failed, so the
   // user can type their way out of an error.
@@ -109,29 +97,19 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
 
-  /** A different global ordering makes the current page number meaningless. */
-  const applyApiOrder = useCallback(
-    (order: MarketsOrder) => {
-      if (order === apiOrder) {
-        return;
-      }
 
-      setApiOrder(order);
-      setPage(FIRST_PAGE);
-      window.scrollTo({ top: 0, behavior: 'auto' });
-    },
-    [apiOrder]
-  );
+  /** A new global ordering makes the current page number meaningless. */
+  const resetToFirstPage = useCallback(() => {
+    setPage(FIRST_PAGE);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, []);
 
   const handleSortFieldChange = useCallback(
     (field: SortField) => {
       setSortField(field);
-
-      if (field === 'market_cap') {
-        applyApiOrder(`market_cap_${sortDirection}` as MarketsOrder);
-      }
+      resetToFirstPage();
     },
-    [applyApiOrder, sortDirection]
+    [resetToFirstPage]
   );
 
   /** A different page size means page N points at different coins. */
@@ -151,12 +129,9 @@ function App() {
   const handleSortDirectionChange = useCallback(
     (direction: SortDirection) => {
       setSortDirection(direction);
-
-      if (sortField === 'market_cap') {
-        applyApiOrder(`market_cap_${direction}` as MarketsOrder);
-      }
+      resetToFirstPage();
     },
-    [applyApiOrder, sortField]
+    [resetToFirstPage]
   );
 
   return (
@@ -197,12 +172,11 @@ function App() {
               value={query}
               onChange={setQuery}
               searching={searchMode && activeLoading}
-              resultCount={visibleCoins.length}
+              resultCount={activeCoins.length}
             />
             <SortControls
               field={sortField}
               direction={sortDirection}
-              scope={sortScope}
               onFieldChange={handleSortFieldChange}
               onDirectionChange={handleSortDirectionChange}
               disabled={controlsDisabled}
@@ -223,7 +197,7 @@ function App() {
               onClear={() => setQuery('')}
             />
           )}
-          {showGrid && <CoinGrid coins={visibleCoins} />}
+          {showGrid && <CoinGrid coins={activeCoins} />}
         </main>
 
         {/* Search results are one set, not a page of the market. */}

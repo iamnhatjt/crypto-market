@@ -1,9 +1,9 @@
 import { apiClient } from './client';
 import { toCoin } from './coins';
-import { Coin, CoinMarketResponse } from '../types/coin';
+import { Coin, CoinMarketResponse, MarketsOrder } from '../types/coin';
 
 /** What CoinGecko's /search returns per coin: identity only, never a price. */
-export interface SearchCoinResponse {
+interface SearchCoinResponse {
   id: string;
   name: string;
   symbol: string;
@@ -25,10 +25,10 @@ export const MIN_SEARCH_LENGTH = 2;
  * matches, and every extra id makes the hydration URL longer for rows nobody
  * scrolls to.
  */
-export const MAX_SEARCH_RESULTS = 25;
+const MAX_SEARCH_RESULTS = 25;
 
-export function searchCacheKey(query: string): string {
-  return `crypto-dashboard:coins:search:${query.toLowerCase()}`;
+export function searchCacheKey(query: string, order: MarketsOrder): string {
+  return `crypto-dashboard:coins:search:${order}:${query.toLowerCase()}`;
 }
 
 const inFlight = new Map<string, Promise<Coin[]>>();
@@ -40,14 +40,15 @@ const inFlight = new Map<string, Promise<Coin[]>>();
  * and /coins/markets knows market data but has no keyword parameter. The `ids`
  * parameter is the bridge between them.
  */
-export async function searchCoins(query: string): Promise<Coin[]> {
+export async function searchCoins(query: string, order: MarketsOrder): Promise<Coin[]> {
   const needle = query.trim();
 
   if (needle.length < MIN_SEARCH_LENGTH) {
     return [];
   }
 
-  const cached = inFlight.get(needle.toLowerCase());
+  const key = `${order}:${needle.toLowerCase()}`;
+  const cached = inFlight.get(key);
 
   if (cached) {
     return cached;
@@ -72,7 +73,7 @@ export async function searchCoins(query: string): Promise<Coin[]> {
       params: {
         vs_currency: 'usd',
         ids: ids.join(','),
-        order: 'market_cap_desc',
+        order,
         per_page: ids.length,
         page: 1,
         sparkline: false,
@@ -85,10 +86,10 @@ export async function searchCoins(query: string): Promise<Coin[]> {
 
     return markets.map(toCoin);
   })().finally(() => {
-    inFlight.delete(needle.toLowerCase());
+    inFlight.delete(key);
   });
 
-  inFlight.set(needle.toLowerCase(), request);
+  inFlight.set(key, request);
 
   return request;
 }

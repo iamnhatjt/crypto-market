@@ -17,6 +17,7 @@ export interface CoinMarketResponse {
    * coins such as namecoin with `market_cap_rank: null` and `market_cap: 0`.
    */
   market_cap_rank: number | null;
+  total_volume: number | null;
   price_change_percentage_24h: number | null;
 }
 
@@ -29,30 +30,32 @@ export interface Coin {
   currentPrice: number;
   marketCap: number;
   marketCapRank: number | null;
+  totalVolume: number | null;
   priceChange24h: number | null;
 }
 
-/** Which field the grid is ordered by. */
-export type SortField = 'market_cap' | 'price' | 'change';
+/**
+ * Fields the grid can be ordered by.
+ *
+ * Deliberately limited to what CoinGecko's `order` parameter honours. Price and
+ * 24h change are absent because the API answers 200 with plain market-cap
+ * ordering when asked for them — offering them would ship two sorts that only
+ * appear to work.
+ */
+export type SortField = 'market_cap' | 'volume';
+
+export type SortDirection = 'asc' | 'desc';
 
 /**
  * `order` values CoinGecko's /coins/markets actually honours.
  *
- * Verified against the live API: it answers 200 with plain market-cap ordering
- * for unsupported values such as `price_desc` or `percent_change_24h_desc`
- * rather than erroring, so sending one would fail silently. This union exists
- * to make that impossible to do by accident.
+ * Verified against the live API, which answers 200 with plain market-cap
+ * ordering for unsupported values such as `price_desc` rather than erroring.
+ * This union exists so an ignored value cannot be sent by accident.
  */
-export type MarketsOrder = 'market_cap_desc' | 'market_cap_asc';
+export type MarketsOrder = `${SortField}_${SortDirection}`;
 
-/**
- * Where a sort applies: resolved by the API across every coin ('market'),
- * locally over the loaded page ('page'), or locally over search results
- * ('results').
- */
-export type SortScope = 'market' | 'page' | 'results';
 
-export type SortDirection = 'asc' | 'desc';
 
 /** Direction of a coin's 24h move, used for colour and iconography. */
 export type Trend = 'up' | 'down' | 'flat';

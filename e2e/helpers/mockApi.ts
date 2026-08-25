@@ -201,9 +201,9 @@ export async function mockCoinsSized(
 }
 
 /** CoinGecko's keyword endpoint. It returns identities only - no prices. */
-export const SEARCH_ROUTE = '**/api/v3/search?*';
+const SEARCH_ROUTE = '**/api/v3/search?*';
 
-export interface SearchFlowState {
+interface SearchFlowState {
   /** Queries that reached /search, in order. */
   searchQueries: string[];
   /** Each `ids=` hydration request, as the list of ids asked for. */

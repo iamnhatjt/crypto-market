@@ -88,8 +88,11 @@ function CoinCard({ coin }: CoinCardProps) {
         </span>
       </div>
 
-      <footer className="mt-auto border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-        Market cap {formatCompactUsd(coin.marketCap)}
+      <footer className="mt-auto flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        <span>Market cap {formatCompactUsd(coin.marketCap)}</span>
+        {/* Shown because volume is sortable; sorting by an invisible value is
+            not something a user can reason about. */}
+        <span data-testid="coin-volume">Vol 24h {formatCompactUsd(coin.totalVolume)}</span>
       </footer>
     </article>
   );

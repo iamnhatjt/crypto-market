@@ -8,6 +8,7 @@ import { test, expect } from '@playwright/test';
 import {
   mockCoins,
   mockCoinsDelayed,
+  mockSearchFlow,
   mockFailThenRecover,
   mockNetworkFailure,
   mockServerError,
@@ -76,39 +77,33 @@ test.describe('network failure', () => {
 });
 
 test.describe('empty search results', () => {
-  test('shows an empty state, not an error, when nothing matches the query', async ({ page }) => {
-    await mockCoins(page);
+  test.beforeEach(async ({ page }) => {
+    await mockSearchFlow(page);
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
+  });
 
+  test('shows an empty state, not an error, when nothing matches the query', async ({ page }) => {
     await page.getByTestId('search-input').fill('zzzznotacoin');
 
     await expect(page.getByTestId('empty-state')).toBeVisible();
     await expect(cards(page)).toHaveCount(0);
-    await expect(page.getByTestId('error-state')).toBeHidden();
+    await expect(page.getByTestId('error-state')).toHaveCount(0);
   });
 
   test('echoes the query back so the user knows what was searched', async ({ page }) => {
-    await mockCoins(page);
-    await page.goto('/');
-    await expectCardCount(page, EXPECTED_COIN_COUNT);
-
     await page.getByTestId('search-input').fill('zzzznotacoin');
 
     await expect(page.getByTestId('empty-state')).toContainText('zzzznotacoin');
   });
 
   test('leaves the empty state when the query is cleared', async ({ page }) => {
-    await mockCoins(page);
-    await page.goto('/');
-    await expectCardCount(page, EXPECTED_COIN_COUNT);
-
-    const search = page.getByTestId('search-input');
-    await search.fill('zzzznotacoin');
+    await page.getByTestId('search-input').fill('zzzznotacoin');
     await expect(page.getByTestId('empty-state')).toBeVisible();
 
-    await search.fill('');
+    await page.getByTestId('search-input').fill('');
+
     await expectCardCount(page, EXPECTED_COIN_COUNT);
-    await expect(page.getByTestId('empty-state')).toBeHidden();
+    await expect(page.getByTestId('empty-state')).toHaveCount(0);
   });
 });

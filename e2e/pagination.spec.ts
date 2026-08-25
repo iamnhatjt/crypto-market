@@ -122,48 +122,28 @@ test.describe('errors while paging', () => {
   });
 });
 
-test.describe('interaction with search and sort', () => {
+test.describe('interaction with sorting', () => {
   test.beforeEach(async ({ page }) => {
     await mockCoinsPaged(page);
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
   });
 
-  test('search filters within the loaded page', async ({ page }) => {
+  test('changing the sort field returns to page 1', async ({ page }) => {
     await page.getByTestId('next-page').click();
-    await expect(card(page, 'ethereum-classic')).toBeVisible();
+    await expect(page.getByTestId('page-indicator')).toContainText('2');
 
-    await page.getByTestId('search-input').fill('tezos');
+    await page.getByTestId('sort-field').selectOption('volume');
 
-    await expectCardCount(page, 1);
-    await expect(card(page, 'tezos')).toBeVisible();
+    await expect(page.getByTestId('page-indicator')).toContainText('1');
   });
 
-  test('states that search is scoped to the current page', async ({ page }) => {
-    await page.getByTestId('search-input').fill('tezos');
-
-    // Tezos is on page 2, so page 1 has no match — and the empty state must
-    // explain that rather than implying the coin does not exist.
-    await expect(page.getByTestId('empty-state')).toBeVisible();
-    await expect(page.getByTestId('empty-state')).toContainText('page 1');
-  });
-
-  test('sort applies to the loaded page', async ({ page }) => {
-    await page.getByTestId('next-page').click();
-    await expect(card(page, 'ethereum-classic')).toBeVisible();
-
-    await page.getByTestId('sort-field').selectOption('price');
-    await page.getByTestId('sort-direction-desc').click();
-
-    const ids = await visibleCoinIds(page);
-    expect(ids[0]).toBe('maker');
-  });
-
-  test('keeps the search query when changing page', async ({ page }) => {
-    await page.getByTestId('search-input').fill('e');
+  test('paging keeps the chosen sort field selected', async ({ page }) => {
+    await page.getByTestId('sort-field').selectOption('volume');
     await page.getByTestId('next-page').click();
 
-    await expect(page.getByTestId('search-input')).toHaveValue('e');
+    await expect(page.getByTestId('page-indicator')).toContainText('2');
+    await expect(page.getByTestId('sort-field')).toHaveValue('volume');
   });
 });
 

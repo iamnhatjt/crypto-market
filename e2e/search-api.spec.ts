@@ -199,34 +199,19 @@ test.describe('browse and search modes', () => {
     await expect(card(page, 'ethereum-classic')).toBeVisible();
   });
 
-  test('says that sorting applies to the search results', async ({ page }) => {
-    await mockSearchFlow(page);
+  test('orders the search results through the API', async ({ page }) => {
+    const state = await mockSearchFlow(page);
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
 
     await page.getByTestId('search-input').fill('bitcoin');
     await expectCardCount(page, 2);
 
-    await page.getByTestId('sort-field').selectOption('price');
-
-    await expect(page.getByTestId('sort-scope')).toContainText('search results');
-  });
-
-  test('sorts the search results locally', async ({ page }) => {
-    await mockSearchFlow(page);
-    await page.goto('/');
-    await expectCardCount(page, EXPECTED_COIN_COUNT);
-
-    await page.getByTestId('search-input').fill('bitcoin');
-    await expectCardCount(page, 2);
-
-    await page.getByTestId('sort-field').selectOption('price');
     await page.getByTestId('sort-direction-asc').click();
 
-    const ids = await cards(page).evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute('data-coin-id'))
-    );
-    expect(ids).toEqual(['wrapped-bitcoin', 'bitcoin']);
+    // The hydration call carries the ordering; nothing is sorted locally.
+    await expect.poll(() => state.hydrationOrders.at(-1)).toBe('market_cap_asc');
+    await expectCardCount(page, 2);
   });
 });
 

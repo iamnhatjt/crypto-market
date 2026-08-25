@@ -1,31 +1,23 @@
 import React from 'react';
-import { SortDirection, SortField, SortScope } from '../types/coin';
+import { SortDirection, SortField } from '../types/coin';
 
 interface SortControlsProps {
   field: SortField;
   direction: SortDirection;
-  /**
-   * Whether the API resolves this sort ('market') or it is applied locally to
-   * the loaded page ('page'). CoinGecko cannot order by price or 24h change, so
-   * those are page-scoped and the difference is shown rather than hidden.
-   */
-  scope: SortScope;
   onFieldChange: (field: SortField) => void;
   onDirectionChange: (direction: SortDirection) => void;
   disabled?: boolean;
 }
 
+/**
+ * Only fields CoinGecko's `order` parameter honours. Price and 24h change are
+ * absent on purpose: the API returns 200 with market-cap ordering when asked
+ * for them, so offering them would ship sorts that silently do nothing.
+ */
 const FIELD_OPTIONS: Array<{ value: SortField; label: string }> = [
   { value: 'market_cap', label: 'Market cap' },
-  { value: 'price', label: 'Price' },
-  { value: 'change', label: '24h change' },
+  { value: 'volume', label: 'Volume (24h)' },
 ];
-
-const SCOPE_LABELS: Record<SortScope, string> = {
-  market: 'across the whole market',
-  page: 'within this page only',
-  results: 'within search results',
-};
 
 const DIRECTION_OPTIONS: Array<{ value: SortDirection; label: string; hint: string }> = [
   { value: 'desc', label: 'High → low', hint: 'Sort descending' },
@@ -35,7 +27,6 @@ const DIRECTION_OPTIONS: Array<{ value: SortDirection; label: string; hint: stri
 function SortControls({
   field,
   direction,
-  scope,
   onFieldChange,
   onDirectionChange,
   disabled = false,
@@ -90,17 +81,6 @@ function SortControls({
         })}
       </div>
 
-      <p
-        data-testid="sort-scope"
-        title={
-          scope === 'market'
-            ? 'CoinGecko orders this server-side across every coin it tracks.'
-            : 'CoinGecko cannot order by this field, so it is sorted on the coins currently loaded.'
-        }
-        className="text-xs text-slate-500 dark:text-slate-400"
-      >
-        {SCOPE_LABELS[scope]}
-      </p>
     </div>
   );
 }
