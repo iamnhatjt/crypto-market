@@ -23,9 +23,10 @@ Node 26.5.0. No Jest/RTL — the CRA scaffolding for it was removed deliberately
 | 6 | As a crypto watcher, I want to switch between light and dark themes and have my choice remembered. | `e2e/theme.spec.ts` |
 | 7 | As a crypto watcher, I want repeat visits to reuse recently fetched data, so that the dashboard is instant and does not get rate-limited — while still being able to force a refresh. | `e2e/caching.spec.ts` |
 | 8 | As a crypto watcher, I want to page beyond the top 20, so that I can look further down the market without loading thousands of coins at once. | `e2e/pagination.spec.ts` |
-| 9 | As a crypto watcher, I want sorting by market cap to reorder the whole market rather than just the rows on screen, so that "lowest market cap" means the actual bottom of the market. | `e2e/sort-order.spec.ts` |
+| 9 | As a crypto watcher, I want every sort option to reorder the whole market via the API, so that "lowest volume" means the actual lowest in the market. | `e2e/sort-order.spec.ts` |
 | 10 | As a crypto watcher, I want to choose how many coins a page shows, so that I can scan a short list or a long one. | `e2e/page-size.spec.ts` |
 | 11 | As a crypto watcher sorting to the bottom of the market, I want coins with no rank to display sensibly, so that the dashboard does not show placeholder junk or contradict itself. | `e2e/unranked-coins.spec.ts` |
+| 12 | As a crypto watcher, I want the search box to find any coin CoinGecko knows about, not just the rows on screen, without firing a request per keystroke. | `e2e/search-api.spec.ts` |
 
 ---
 
@@ -264,6 +265,67 @@ sort row.
 
 Two helper interfaces flagged by knip after this task were made module-internal.
 
+### Task 12 — Debounced API-backed search (RED → GREEN)
+
+`/coins/markets` has no keyword parameter, so keyword search is two hops. Probed live
+before writing code:
+
+```
+/search?query=cardano
+  -> {coins:[{id,name,symbol,market_cap_rank}], ...}  6 matches, no prices
+/coins/markets?ids=cardano,cockcardano,...&vs_currency=usd
+  -> cardano price=0.226636 rank=18 chg24h=2.87561
+     binance-peg-cardano rank=None, cardanogpt chg24h=None
+```
+
+- **RED:** `13 failed, 4 passed` (`96f97e8`)
+- **GREEN:** `17 passed` on the spec.
+
+This **reversed an earlier decision**, recorded here because the reasoning changed rather
+than the preference: search originally had no debounce, correctly, because filtering
+twenty in-memory coins is synchronous. Once the keystroke triggers two network requests,
+the same reasoning demands a debounce — 400ms, with a two-character minimum.
+
+Two of my own test assertions were racy and were fixed rather than accommodated: they
+asserted on request state before the 400ms debounce had fired, and used `cardano`, which
+is on page 1 and so was already visible from the browse list. Retargeted at `tezos`,
+which lives on page 2 and can therefore only appear via search.
+
+### Task 13 — Restrict sorting to what the API supports (RED → GREEN)
+
+Direction from review: sorts the API cannot perform should not exist, and the
+"within this page only" caveat should go with them. Re-probed to settle it:
+
+| `order` | HTTP | First three | Verdict |
+|---|---|---|---|
+| `market_cap_asc` | 200 | namecoin, primecoin, whitecoin | honoured |
+| `volume_asc` | 200 | nxm (0), idle-dai-yield (0), … | honoured |
+| `price_desc` | 200 | bitcoin, ethereum, tether | **ignored** |
+| `percent_change_24h_desc` | 200 | bitcoin, ethereum, tether | **ignored** |
+
+Also confirmed `order` applies to `ids`-based calls
+(`ids=bitcoin,cardano,tether&order=volume_asc` → cardano $618M, bitcoin $56.8B,
+tether $92.7B), so search results are server-ordered too.
+
+- **RED:** `10 failed, 5 passed` (`4716863`)
+- **GREEN:** `15 passed` on the spec; `227 passed, 5 skipped` overall (`552d368`)
+
+Outcome: `SortField` is `market_cap | volume`; `MarketsOrder` is a template union of field
+and direction so an ignored value is unrepresentable; `SortScope` and the scope label are
+deleted; `src/lib/sort.ts` is deleted, since with no local sorting or filtering left both
+`filterCoins` and `sortCoins` were dead; and the card shows 24h volume, because sorting by
+an invisible value is not something a user can reason about.
+
+**Ten legacy tests were migrated**, having assumed page-scoped filtering or local
+price/change sorting. One assertion was *replaced* rather than kept: it checked reversed
+ordering under a mock that serves the same payload for every `order`, so it could not hold
+there. That behaviour is covered properly in `sort-order.spec.ts`, which mocks a payload
+that varies by order. Recorded here so the deletion is not mistaken for lost coverage.
+
+Five dead exports flagged by knip after these tasks were made module-internal, and one
+unused import failed `CI=true npm run build` (CRA treats lint warnings as errors) — caught
+because the build is part of the verification, not just `tsc`.
+
 ---
 
 ## Test specification
@@ -339,6 +401,19 @@ Two helper interfaces flagged by knip after this task were made module-internal.
 | 67 | A ranked coin still shows its badge on a partially ranked page | `unranked-coins.spec.ts:a ranked coin still shows its rank badge` | e2e | PASS |
 | 68 | The pager reports a coin count when no coin carries a rank, and the ranks that exist when some do | `unranked-coins.spec.ts:the pager summary` | e2e | PASS |
 | 69 | An unranked page leaks no NaN/undefined/null | `unranked-coins.spec.ts:leaks no NaN` | e2e | PASS |
+| 70 | Only market cap and volume are offered as sorts; price and 24h change are absent | `sort-order.spec.ts:the offered fields match what the API supports` | e2e | PASS |
+| 71 | No sort-scope caveat is rendered | `sort-order.spec.ts:shows no sort-scope caveat` | e2e | PASS |
+| 72 | All four field/direction pairs send their matching `order` | `sort-order.spec.ts:every field and direction reaches the API` | e2e | PASS |
+| 73 | Only `order` values the API honours are ever sent | `sort-order.spec.ts:only ever sends an order the API honours` | e2e | PASS |
+| 74 | The search hydration call carries the current `order` | `sort-order.spec.ts:passes the chosen order to the hydration call` | e2e | PASS |
+| 75 | 24h volume is shown, with a placeholder when absent | `sort-order.spec.ts:volume is visible` | e2e | PASS |
+| 76 | Typing fires one search once it settles, and only the final query | `search-api.spec.ts:debouncing` | e2e | PASS |
+| 77 | A query below two characters costs no request | `search-api.spec.ts:ignores a query too short` | e2e | PASS |
+| 78 | The query is trimmed before being sent | `search-api.spec.ts:trims the query` | e2e | PASS |
+| 79 | Search finds coins beyond the visible page, hydrated with prices | `search-api.spec.ts:the two-step flow` | e2e | PASS |
+| 80 | No hydration call is made when nothing matched | `search-api.spec.ts:skips the hydration call` | e2e | PASS |
+| 81 | The latest query wins, and a repeat query is served from cache | `search-api.spec.ts:races and caching` | e2e | PASS |
+| 82 | The pager hides while searching and the previous page is restored on clear | `search-api.spec.ts:browse and search modes` | e2e | PASS |
 
 ---
 
@@ -347,7 +422,7 @@ Two helper interfaces flagged by knip after this task were made module-internal.
 No line-coverage number is reported. Playwright is a black-box browser runner, and
 `react-scripts` provides no instrumentation hook for it without ejecting or adding a
 second runner — which would defeat the single-runner decision. Coverage is instead stated
-as behavioural coverage: the 69 guarantees above map onto every numbered requirement in
+as behavioural coverage: the 82 guarantees above map onto every numbered requirement in
 `docs/INTERVIEW_TASK.md`, including all four listed edge cases.
 
 **Deliberate gaps:**
@@ -364,8 +439,10 @@ as behavioural coverage: the 69 guarantees above map onto every numbered require
   brief and called out in the README. Pagination *is* now implemented and covered.
 - **The page number is not in the URL**, so a page cannot be linked or survive a refresh.
   Untested because unimplemented; noted in the README.
-- **Search is scoped to the loaded page**, by design. The suite asserts that scoping and
-  that the UI states it, rather than asserting a global search that does not exist.
+- **Search is now global**, so the earlier page-scoped limitation is gone.
+- **Price and 24h change cannot be sorted at all**, because the API cannot do it and
+  offering a local-only sort was judged worse than not offering one. A clearly-labelled
+  "reorder these results" control is the follow-up noted in the README.
 
 **No skipped or disabled tests.** The 5 reported skips are `responsive.spec.ts` opting out
 of the mobile project via `test.skip(({ isMobile }) => …)`, because those tests set their
@@ -379,10 +456,11 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
 
 - **RED:** 43/43 Playwright tests failed on `[data-testid=coin-card]` not found, before
   any feature code existed (`a26ca25`).
-- **GREEN:** 199 passed / 5 skipped after implementation, the rounding fix, the
-  environment-configuration refactor, the dead-code cleanup, server-side pagination,
-  API-backed market cap sorting and the page-size selector — with `tsc --noEmit` clean,
-  `npm run build` compiling and `knip` reporting no unused files, exports or dependencies.
+- **GREEN:** 227 passed / 5 skipped after implementation, the rounding fix, the
+  environment-configuration refactor, the dead-code cleanup, server-side pagination, the
+  page-size selector, debounced API-backed search and the restriction of sorting to
+  API-supported fields — with `tsc --noEmit` clean, `CI=true npm run build` compiling and
+  `knip` reporting no unused files, exports or dependencies.
 - **Second bug found by looking at the rendered page, fixed under test:** the header
   claimed "Top 20" while showing ranks 21-40 (`RED 4 failed -> GREEN 17 passed`).
 - **Third bug, found by driving the live API:** `market_cap_rank` is nullable at the
@@ -390,7 +468,10 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
   empty page above 50 coins (`RED 3 failed -> GREEN 20 passed`).
 - **A trap avoided by probing the API before coding:** CoinGecko silently ignores
   `order=price_*` and `order=percent_change_24h_*`, answering 200 with market-cap order.
-  Only market cap is sent server-side; the type system now makes the alternative
-  unrepresentable.
+  Those sorts were removed rather than faked; volume was added because it genuinely works;
+  and the type system now makes an ignored value unrepresentable.
+- **A reversed decision, for a stated reason:** search originally had no debounce, which
+  was right for an in-memory filter and wrong once the keystroke triggered two network
+  requests.
 - **Bug found and fixed under test:** 24h changes that round to zero rendered as red
   losses; found by driving the live API, fixed RED→GREEN (`caae21d`).

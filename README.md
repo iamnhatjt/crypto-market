@@ -1,10 +1,9 @@
 # Crypto Market Dashboard
 
-A responsive dashboard showing the top 20 cryptocurrencies by market cap, built with
-React, TypeScript, Tailwind CSS and axios, against the free
-[CoinGecko API](https://docs.coingecko.com/reference/coins-markets).
+Live cryptocurrency market dashboard built with React, TypeScript, Tailwind CSS and axios,
+against the free [CoinGecko API](https://docs.coingecko.com/reference/coins-markets).
 
-![Dashboard, light theme](docs/screenshot-light.png)
+![Dashboard](docs/screenshot-light.png)
 
 <details>
 <summary>Dark theme</summary>
@@ -15,241 +14,131 @@ React, TypeScript, Tailwind CSS and axios, against the free
 
 ## Features
 
-| Requirement | How it works |
+| | |
 |---|---|
-| **Data fetching** | axios client with a 10s timeout, retry-with-backoff, and a 60s TTL cache |
-| **Responsive grid** | 1 column on mobile, 2 on tablet, 3 on laptop, 4 on desktop |
-| **Card content** | Icon, name, symbol, USD price, 24h change (green up / red down), market cap and rank |
-| **Search** | Filters by name *or* symbol, case- and whitespace-insensitive |
-| **Sort** | Market cap (server-side, whole market), price or 24h change (current page) |
-| **Pagination** | Server-side: each page is its own request, separately cached |
-| **Page size** | 10/20/50/100 per page, sent as `per_page` — not a local slice |
-| **Edge cases** | Loading skeletons, error state with retry, empty search state, network-failure recovery |
-| **Bonus** | Server-side pagination, dark/light theme toggle (persisted), and a Playwright E2E suite |
+| **Data** | axios client, 10s timeout, retry with backoff, 60s TTL cache |
+| **Grid** | 1 column mobile → 2 tablet → 3 laptop → 4 desktop |
+| **Card** | Icon, name, symbol, USD price, 24h change (green/red), market cap, 24h volume, rank |
+| **Search** | Debounced keyword search via the API, across the whole market |
+| **Sort** | Market cap or 24h volume, both server-side |
+| **Paging** | Server-side, one request per page, 10/20/50/100 per page |
+| **States** | Loading skeletons, error + retry, empty results, network recovery |
+| **Bonus** | Dark/light theme (persisted), 227 Playwright E2E tests |
 
-## Getting started
+## Quick start
 
-**Prerequisites:** Node 20 LTS or newer, and npm 9+.
-(Developed and verified on Node 26; `react-scripts` 5 is unmaintained, so if you hit an
-install or build error on a very new Node, Node 20 LTS is the safe fallback.)
+Requires **Node 20+**.
 
 ```bash
 npm install
-npm start          # http://localhost:3000
+npm start                    # http://localhost:3000
+
+npx playwright install chromium   # once
+npm test                     # 227 passed, 5 skipped
 ```
 
-No API key or setup is needed — the CoinGecko markets endpoint is public, and `.env`
-ships with working defaults.
-
-### Configuration
-
-All configuration is optional. `.env` is committed with non-secret defaults so the app
-runs with zero setup; `.env.example` documents every variable. To override anything —
-including a real API key — copy it to `.env.local`, which is gitignored:
-
-```bash
-cp .env.example .env.local
-```
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `REACT_APP_COINGECKO_BASE_URL` | `https://api.coingecko.com/api/v3` | API root. Use `https://pro-api.coingecko.com/api/v3` with a Pro key. |
-| `REACT_APP_COINGECKO_API_KEY` | *(blank)* | Optional key; raises the rate limit. Blank means unauthenticated. |
-| `REACT_APP_COINGECKO_API_KEY_HEADER` | `x-cg-demo-api-key` | Demo plans use this; Pro plans use `x-cg-pro-api-key`. |
-| `REACT_APP_COINS_PER_PAGE` | `20` | How many coins to request. |
-| `REACT_APP_CACHE_TTL_MS` | `60000` | How long a fetched list stays fresh. |
-| `REACT_APP_REQUEST_TIMEOUT_MS` | `10000` | Per-request timeout. |
-
-Two things worth knowing. Create React App inlines `REACT_APP_*` at **build** time, so
-restart `npm start` after editing. And every value is validated in `src/config/env.ts` —
-a malformed number falls back to its default rather than becoming `per_page=NaN` in a
-live request.
-
-**Never put a real key in `.env`** — it is committed. That is what `.env.local` is for.
+No API key needed — the endpoint is public and `.env` ships with working defaults.
 
 ### Scripts
 
-| Command | What it does |
+| Command | |
 |---|---|
-| `npm start` | Dev server on port 3000 |
-| `npm run build` | Production build into `build/` |
-| `npm test` / `npm run test:e2e` | Playwright E2E suite (starts the dev server automatically) |
-| `npm run test:e2e:ui` | Playwright UI mode, for stepping through tests |
-| `npm run test:e2e:report` | Open the HTML report from the last run |
+| `npm start` | Dev server |
+| `npm run build` | Production build |
+| `npm test` | Playwright E2E (boots the dev server itself) |
+| `npm run test:e2e:ui` | Playwright UI mode |
 
-First test run needs the browser binary once:
+### Configuration
 
-```bash
-npx playwright install chromium
-```
+All optional. `.env` holds non-secret defaults; copy `.env.example` to `.env.local` to
+override, including an API key. Note CRA inlines `REACT_APP_*` at **build** time, so
+restart after editing. Malformed values fall back to their default.
+
+| Variable | Default |
+|---|---|
+| `REACT_APP_COINGECKO_BASE_URL` | `https://api.coingecko.com/api/v3` |
+| `REACT_APP_COINGECKO_API_KEY` | *(blank — unauthenticated)* |
+| `REACT_APP_COINGECKO_API_KEY_HEADER` | `x-cg-demo-api-key` |
+| `REACT_APP_COINS_PER_PAGE` | `20` |
+| `REACT_APP_CACHE_TTL_MS` | `60000` |
+| `REACT_APP_REQUEST_TIMEOUT_MS` | `10000` |
+
+**Never put a real key in `.env`** — it is committed. That is what `.env.local` is for.
 
 ## Architecture
 
 ```
 src/
-├── api/
-│   ├── client.ts        axios instance, retry interceptor, error→message mapping
-│   └── coins.ts         typed fetch + request coalescing + cache key
-├── config/env.ts        REACT_APP_* config with validation and defaults
-├── types/coin.ts        CoinMarketResponse (wire) and Coin (domain)
-├── hooks/
-│   ├── useCoins.ts      loading / error / data, retry and force-refresh
-│   └── useTheme.ts      dark mode, persisted to localStorage
-├── lib/
-│   ├── cache.ts         TTL cache: in-memory tier over sessionStorage
-│   ├── format.ts        price and percentage formatting, trend derivation
-│   └── sort.ts          pure filterCoins / sortCoins
-├── components/
-│   ├── CoinCard, CoinGrid, SearchBar, SortControls, ThemeToggle
-│   ├── Pagination (hosts PageSizeSelect)
-│   └── states/          SkeletonGrid, ErrorState, EmptyState
-└── App.tsx              owns search/sort state, picks which state to render
-e2e/                     Playwright specs, fixtures and helpers
+├── api/         client.ts (axios + retry)  coins.ts  search.ts
+├── config/      env.ts — REACT_APP_* with validation and defaults
+├── types/       CoinMarketResponse (wire) → Coin (domain)
+├── hooks/       useCoins  useCoinSearch  useDebouncedValue  useTheme
+├── lib/         cache.ts (TTL)  format.ts
+├── components/  CoinCard CoinGrid SearchBar SortControls ThemeToggle
+│                Pagination (hosts PageSizeSelect)  states/
+└── App.tsx      owns query/sort/page state
+e2e/             Playwright specs, fixtures, mocks
 ```
 
-The layering rule: `api/` is the only place that knows HTTP, `hooks/` is the only place
-that holds async state, `lib/` is pure and side-effect free, and `components/` receive
-props and render. `App.tsx` is the only stateful component.
+`api/` is the only layer that knows HTTP, `hooks/` the only one holding async state,
+`lib/` is pure, `components/` take props. `App.tsx` is the only stateful component.
 
-### Decisions and tradeoffs
+## Key decisions
 
-**Why a custom hook instead of React Query or SWR.** The app makes exactly one request.
-A data-fetching library would bring caching, retries and deduplication I'd otherwise
-write — but it would also hide the part of the brief that's actually being assessed.
-Writing `useCoins` plus a small cache keeps the caching strategy explicit and readable.
-At two or three more endpoints I'd switch to React Query rather than grow this.
+**Price and 24h change are not sortable — deliberately.** CoinGecko's `order` supports
+`market_cap_*`, `volume_*` and `id_*`. Ask it for `price_desc` and it returns **200 with
+plain market-cap ordering** rather than an error, so those sorts would look functional and
+do nothing. They were removed; volume was added because it genuinely works. `MarketsOrder`
+is a template union of field × direction, making an ignored value unrepresentable.
 
-**Caching is two-tier and deliberately short-lived.** An in-memory `Map` serves
-re-renders; `sessionStorage` survives a reload but is scoped to the tab, so opening the
-dashboard fresh always gets fresh prices. The TTL is 60s because CoinGecko's free tier
-rate-limits aggressively and prices don't move meaningfully faster than that. All
-storage access is wrapped in `try/catch` — Safari private mode makes `sessionStorage`
-*throw* rather than return null.
+**Search is two requests, debounced 400ms.** `/coins/markets` takes no keyword, so
+`/search` resolves the keyword to ids and `/coins/markets?ids=…` supplies the prices
+`/search` omits. This reverses an earlier no-debounce decision: right for an in-memory
+filter, wrong once a keystroke costs two requests. Responses for superseded queries are
+discarded. Search covers the whole market, so the pager hides while it is active.
 
-**Requests are coalesced, not just cached.** React StrictMode intentionally double-invokes
-effects in development, and a user can hit Refresh while a load is running. Both would
-fire duplicate requests at a rate-limited API, so `fetchCoins` returns the in-flight
-promise when one exists.
+**Nothing is sorted or filtered locally.** The API is the single source of ordering, which
+is why `src/lib/sort.ts` doesn't exist.
 
-**Retries are selective.** The interceptor retries twice with 300ms/600ms backoff on
-429s, 5xx, timeouts and dropped connections. It never retries a 4xx: that means our
-request was wrong, and retrying would only spend the rate limit faster.
+**Caching is two-tier and keyed by request.** An in-memory `Map` over `sessionStorage`,
+keyed by order + page size + page (and by query for search), with a 60s TTL because the
+free tier rate-limits hard. Requests are also coalesced — StrictMode's double effect and a
+refresh click must not become two calls. All storage access is wrapped: Safari private
+mode makes `sessionStorage` *throw*.
 
-**One price formatter for the whole range.** `Intl.NumberFormat` with
-`minimumFractionDigits: 2` and `maximumFractionDigits: 8` renders BTC as `$80,819.00`
-and SHIB as `$0.00002341`. A naive two-decimal formatter collapses every sub-cent coin
-to `$0.00`.
+**Retries are selective.** Two retries, 300/600ms backoff, on 429s, 5xx, timeouts and
+dropped connections — never on 4xx, which means our request was wrong.
 
-**Trend follows the displayed number, not the raw one.** The live API returns changes
-like `-0.0004%` for stablecoins. Deriving colour from the raw value painted a red
-`-0.00%` — a loss the user can see didn't happen. Both the label and the trend now key
-off the value rounded to display precision.
+**One price formatter for the whole range.** `Intl.NumberFormat` with 2–8 fraction digits
+renders BTC as `$80,819.00` and SHIB as `$0.00002341`. Trend follows the *rounded* value,
+so a stablecoin at `-0.0004%` shows a neutral `0.00%`, not a red loss. Nullable fields
+(`market_cap_rank`, `price_change_percentage_24h`) are typed as such — both are genuinely
+null at the bottom of the market.
 
-**Nulls sink to the bottom when sorting.** `price_change_percentage_24h` is genuinely
-nullable in the live API. Treating null as `0` would rank an unknown change above every
-real loss; "no data" is not "flat", so nulls sort last in *both* directions.
-
-**No debounce on search.** Filtering 20 in-memory coins is synchronous. A debounce would
-only add latency between keystroke and result.
-
-**Pagination is server-side, and search is scoped to the loaded page.** Each page is a
-separate `page=N` request with its own cache entry, so paging back is instant and no
-request is repeated. The honest tradeoff: search and sort only see the page you are on.
-Making search global would mean either fetching every coin up front (thousands of rows
-for a 20-row view) or calling CoinGecko's search endpoint, which returns a different
-shape with no prices. Rather than hide that, the UI states it — the pager reports the
-rank range you are viewing, and an empty search result says which page it searched.
-
-**Only market cap is sorted by the API — and that is a limitation of the API, not a
-shortcut.** CoinGecko's `order` parameter accepts `market_cap_asc|desc`, `volume_*` and
-`id_*`. It does *not* support price or 24h change, and it does not reject them either:
-
-| `order` sent | HTTP | First three coins |
-|---|---|---|
-| `market_cap_asc` | 200 | namecoin, primecoin, whitecoin ✅ |
-| `volume_desc` | 200 | tether, bitcoin, usd-coin ✅ |
-| `price_desc` | 200 | bitcoin, ethereum, tether ❌ silently market-cap order |
-| `percent_change_24h_desc` | 200 | bitcoin, ethereum, tether ❌ silently market-cap order |
-
-Tether at $0.99 ranking third "by price" is the tell. Wiring all three fields to the API
-would leave two of them quietly broken with no error to debug. So market cap goes to the
-API and spans every coin CoinGecko tracks; price and 24h change are sorted locally over
-the loaded page; and the `MarketsOrder` type is narrowed to the two values that actually
-work, so an ignored value cannot be sent by accident. The sort row states which scope is
-in effect — "across the whole market" or "within this page only".
-
-**Page size is a request parameter, not a local slice.** Choosing 50 fetches 50. It caches
-under its own key and resets to page 1, because page 3 of 20-per-page and page 3 of
-50-per-page point at different coins. The list stops at 100 even though CoinGecko allows
-250: past that the payload and the number of rendered cards cost more than the extra rows
-are worth in a grid you scan.
-
-**"Next" is enabled by page length, not a total count.** CoinGecko does not return a
-total on this endpoint. A full page means "there may be more"; a short page means the
-end. Showing a true page count would cost an extra request for a number the user does
-not act on.
+**Chose CRA over Vite** because it was requested. `react-scripts` is unmaintained since
+2022 and its transitive deps show up in `npm audit`; that's dev-only build tooling, not
+shipped code, but Vite would be the real fix.
 
 ## Testing
 
-Playwright is the only test runner, and every spec mocks the network with `page.route()`
-against a fixture. That's what makes the interesting assertions possible at all — you
-can't ask the live API for a 500, a dropped connection, or a coin with a null 24h change
-on demand. It also means the suite never burns the rate limit and never flakes on real
-price movement.
+Playwright only, every request mocked — that's what makes a 500, a dropped connection, or
+a null 24h change assertable on demand, and keeps the suite off the rate limit.
 
 ```bash
-npm run test:e2e
+npm test        # 227 passed, 5 skipped
 ```
 
-**199 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
-viewport-driven responsive tests, scoped to the desktop project so they run once.
-
-| Spec | Covers |
-|---|---|
-| `dashboard.spec.ts` | 20 cards render; price and percentage formatting; green/red/neutral trend; sub-cent prices; null change; changes that round to zero; no `NaN` leaking into the DOM |
-| `search-sort.spec.ts` | Filter by name and by symbol; case and whitespace; sort all three fields both directions; nulls last; search and sort combined |
-| `edge-cases.spec.ts` | Skeletons while loading; 500 and 429 error states; retry that actually recovers; dropped connection; empty search results |
-| `responsive.spec.ts` | 1/2/3/4 columns at 390/768/1024/1440px; no horizontal overflow at 320px |
-| `caching.spec.ts` | One request on load; reload served from cache; refresh bypasses it; TTL expiry re-fetches |
-| `api-request.spec.ts` | The outgoing query matches the brief; `per_page` is never `NaN`; no API key header when unset |
-| `pagination.spec.ts` | Pager state and disabled edges; `page=N` reaches the API; short final page ends paging; pages cache independently; a failing page recovers via retry; search/sort scoped to the page; rank-range summary; scroll-to-top |
-| `sort-order.spec.ts` | Market cap round-trips as `order=market_cap_asc\|desc`; the API's ordering is rendered, not re-sorted; order change resets to page 1; orders cache separately; price/24h change never hit the API and no ignored `order` value is ever sent; the scope label |
-| `page-size.spec.ts` | The selector lives with the pager and is labelled; `per_page` reaches the API; the list grows and shrinks; page resets; sizes cache separately; paging and end-of-data respect the size; heading, rank range and search follow it |
-| `unranked-coins.spec.ts` | A coin with `market_cap_rank: null` shows no badge and no dangling `#`; the pager falls back to a coin count instead of claiming the page is empty; partially ranked pages report the ranks that exist |
-| `theme.spec.ts` | Dark mode toggle, round trip, persistence across reload, and the storage key the pre-paint script depends on |
-
-The fixture in `e2e/fixtures/coins.ts` is shaped so each edge case has exactly one
-unambiguous answer — a unique highest price, a unique biggest gainer, one coin with a
-null change, one sub-cent price.
-
-Beyond the suite, the app was verified against the live API: one network request,
-20 cards, real prices. That live run is what surfaced the `-0.00%` bug.
-
-## What I'd do with more time
-
-- **Coin detail page with a price chart** — needs a router and a chart library, and the
-  `/coins/{id}/market_chart` endpoint. The biggest missing feature.
-- **Put the page number in the URL** — right now paging is component state, so a page
-  cannot be linked or survive a refresh. This needs either a router or `history.pushState`;
-  a router would land naturally alongside the detail page above.
-- **Global search across pages** — see the tradeoff note above. Would use CoinGecko's
-  `/search` endpoint plus a follow-up markets call to hydrate prices.
-- **Volume as a fourth sort field** — the API genuinely supports `volume_asc|desc`, so it
-  would be another real server-side sort for roughly the cost of one enum value.
-- **Unit tests for `lib/`** — the pure functions are currently covered through the DOM.
-  E2E proves the user-visible behaviour, but a Vitest layer over `format.ts` and
-  `sort.ts` would pin edge cases faster than a browser round trip.
-- **Migrate off Create React App** — `react-scripts` has been unmaintained since 2022 and
-  its transitive dependencies show up in `npm audit`. They're dev-only build tooling, not
-  shipped code, so it isn't a production risk, but Vite would be the real fix.
-- **Auto-refresh with a visible "last updated" timestamp** — a 60s interval that respects
-  page visibility, so a backgrounded tab doesn't poll.
-
-## Testing notes
-
-A full TDD evidence report — user journeys, RED/GREEN output for each stage, the
-69 behavioural guarantees and the known gaps — lives in
+The 5 skips are viewport-driven responsive tests, scoped to the desktop project so they
+run once. Full RED/GREEN evidence and all 82 behavioural guarantees:
 [`docs/testing/crypto-market-dashboard.tdd.md`](docs/testing/crypto-market-dashboard.tdd.md).
+
+## With more time
+
+- **Coin detail page with a price chart** — needs a router and a chart library. Biggest gap.
+- **Page number in the URL** — paging is component state, so a page can't be linked.
+- **A labelled "reorder these results" control** — gives price/24h change back honestly,
+  scoped to the loaded set rather than pretending to be market-wide.
+- **Migrate off CRA.**
 
 ## Licence
 
