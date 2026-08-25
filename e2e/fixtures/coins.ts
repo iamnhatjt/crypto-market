@@ -55,3 +55,71 @@ export const coinsFixture: MarketCoinFixture[] = [
 
 /** Coins whose name or symbol contains "bitcoin"/"wbtc" etc. — handy in assertions. */
 export const EXPECTED_COIN_COUNT = coinsFixture.length;
+
+/** Matches REACT_APP_COINS_PER_PAGE's default; a short page means "no more pages". */
+export const PER_PAGE = 20;
+
+/** Compact builder for the later pages, where only identity and order matter. */
+function buildPage(
+  entries: Array<[id: string, symbol: string, name: string, price: number, change: number | null]>,
+  startRank: number
+): MarketCoinFixture[] {
+  return entries.map(([id, symbol, name, current_price, price_change_percentage_24h], index) => ({
+    id,
+    symbol,
+    name,
+    image: icon('64748b'),
+    current_price,
+    market_cap: 3_000_000_000 - index * 10_000_000,
+    market_cap_rank: startRank + index,
+    price_change_percentage_24h,
+  }));
+}
+
+/** A full second page — ranks 21-40. Exactly PER_PAGE long, so more pages follow. */
+export const coinsPage2Fixture: MarketCoinFixture[] = buildPage(
+  [
+    ['ethereum-classic', 'etc', 'Ethereum Classic', 24.11, 1.2],
+    ['filecoin', 'fil', 'Filecoin', 5.42, -2.1],
+    ['hedera', 'hbar', 'Hedera', 0.0721, 3.4],
+    ['aptos', 'apt', 'Aptos', 8.93, -1.7],
+    ['near', 'near', 'NEAR Protocol', 4.16, 2.8],
+    ['arbitrum', 'arb', 'Arbitrum', 0.8412, -3.9],
+    ['optimism', 'op', 'Optimism', 1.7234, 4.1],
+    ['injective', 'inj', 'Injective', 19.86, -0.6],
+    ['stacks', 'stx', 'Stacks', 1.4123, 5.2],
+    ['maker', 'mkr', 'Maker', 2412.55, -1.1],
+    ['thorchain', 'rune', 'THORChain', 3.8891, 6.7],
+    ['algorand', 'algo', 'Algorand', 0.1512, -2.4],
+    ['fantom', 'ftm', 'Fantom', 0.5231, 1.9],
+    ['flow', 'flow', 'Flow', 0.6104, -4.3],
+    ['sandbox', 'sand', 'The Sandbox', 0.3211, 2.2],
+    ['axie-infinity', 'axs', 'Axie Infinity', 5.7712, -1.5],
+    ['tezos', 'xtz', 'Tezos', 0.7823, 0.9],
+    ['theta', 'theta', 'Theta Network', 1.2044, -2.8],
+    ['eos', 'eos', 'EOS', 0.4712, 1.4],
+    ['chiliz', 'chz', 'Chiliz', 0.0612, -3.1],
+  ],
+  21
+);
+
+/** A SHORT third page — 7 coins. Fewer than PER_PAGE means this is the last page. */
+export const coinsPage3Fixture: MarketCoinFixture[] = buildPage(
+  [
+    ['neo', 'neo', 'NEO', 11.24, 0.7],
+    ['iota', 'iota', 'IOTA', 0.1823, -1.9],
+    ['kava', 'kava', 'Kava', 0.4231, 2.6],
+    ['zilliqa', 'zil', 'Zilliqa', 0.0142, -0.4],
+    ['ravencoin', 'rvn', 'Ravencoin', 0.0181, 1.1],
+    ['ontology', 'ont', 'Ontology', 0.2011, -2.2],
+    ['digibyte', 'dgb', 'DigiByte', 0.0074, 0.3],
+  ],
+  41
+);
+
+/** Page number -> the coins that page serves. */
+export const pagedFixtures: Record<number, MarketCoinFixture[]> = {
+  1: coinsFixture,
+  2: coinsPage2Fixture,
+  3: coinsPage3Fixture,
+};
