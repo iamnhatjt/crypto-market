@@ -3,6 +3,8 @@
 Live cryptocurrency market dashboard built with React, TypeScript, Tailwind CSS and axios,
 against the free [CoinGecko API](https://docs.coingecko.com/reference/coins-markets).
 
+**[→ Live demo](https://crypto-market-gray.vercel.app/)**
+
 ![Dashboard](docs/screenshot-light.png)
 
 <details>
