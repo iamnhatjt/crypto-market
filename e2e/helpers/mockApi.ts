@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { bitcoinDetailFixture, CoinDetailFixture } from '../fixtures/detail';
 import {
   coinsFixture,
   coinsServerOrderedFixture,
@@ -290,6 +291,65 @@ export async function mockSearchFlow(
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(pagedFixtures[requestedPage] ?? []),
+    });
+  });
+
+  return state;
+}
+
+/**
+ * Matches `/coins/{id}` but NOT `/coins/markets` or `/coins/{id}/market_chart`.
+ *
+ * The negative lookahead excludes the markets list, and requiring `?` or
+ * end-of-string after the id excludes the nested chart path.
+ */
+export const COIN_DETAIL_ROUTE = /\/api\/v3\/coins\/(?!markets)[^/?]+(\?|$)/;
+
+export interface DetailMockState {
+  requestedIds: string[];
+  /** Stop failing and start serving the fixture. */
+  recover: () => void;
+}
+
+export async function mockCoinDetail(
+  page: Page,
+  options?: {
+    detail?: CoinDetailFixture;
+    /** Respond with this status instead of the fixture. */
+    status?: number;
+    /** Fail every request until recover() is called. */
+    failUntilRecovered?: boolean;
+    delayMs?: number;
+  }
+): Promise<DetailMockState> {
+  const state = { requestedIds: [] as string[], recover: () => {} };
+  let failing = options?.failUntilRecovered ?? false;
+  state.recover = () => {
+    failing = false;
+  };
+
+  await page.route(COIN_DETAIL_ROUTE, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    state.requestedIds.push(path.split('/').filter(Boolean).pop() ?? '');
+
+    if (options?.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+    }
+
+    const status = failing ? 500 : (options?.status ?? 200);
+
+    if (status >= 400) {
+      return route.fulfill({
+        status,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'coin not found' }),
+      });
+    }
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(options?.detail ?? bitcoinDetailFixture),
     });
   });
 
