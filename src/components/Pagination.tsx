@@ -1,4 +1,5 @@
 import React from 'react';
+import PageSizeSelect from './PageSizeSelect';
 
 interface PaginationProps {
   page: number;
@@ -11,8 +12,10 @@ interface PaginationProps {
   rankRange: { first: number; last: number } | null;
   /** Coins on the page, used as the summary when none of them carry a rank. */
   coinCount: number;
+  pageSize: number;
   disabled?: boolean;
   onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
 }
 
 function Pagination({
@@ -20,8 +23,10 @@ function Pagination({
   hasNextPage,
   rankRange,
   coinCount,
+  pageSize,
   disabled = false,
   onPageChange,
+  onPageSizeChange,
 }: PaginationProps) {
   /*
    * Ranks are the most useful summary, but coins at the bottom of the market
@@ -49,7 +54,9 @@ function Pagination({
     >
       <p className="text-xs text-slate-500 dark:text-slate-400">{summary}</p>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <PageSizeSelect value={pageSize} onChange={onPageSizeChange} disabled={disabled} />
+
         <button
           type="button"
           data-testid="prev-page"

@@ -22,6 +22,19 @@ test.describe('the control', () => {
     await expect(page.getByTestId('page-size')).toHaveValue('20');
   });
 
+  test('sits with the pagination controls, not in the header', async ({ page }) => {
+    // Page size is a paging concern, so it belongs next to prev/next rather
+    // than crowding the search and sort row.
+    await expect(page.getByTestId('pagination').getByTestId('page-size')).toBeVisible();
+    await expect(page.getByRole('banner').getByTestId('page-size')).toHaveCount(0);
+  });
+
+  test('is labelled so its purpose is clear on its own', async ({ page }) => {
+    const select = page.getByTestId('pagination').getByTestId('page-size');
+
+    await expect(select).toHaveAccessibleName(/per page/i);
+  });
+
   test('offers the configured default among its options', async ({ page }) => {
     const values = await page
       .getByTestId('page-size')

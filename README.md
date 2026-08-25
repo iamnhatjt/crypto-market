@@ -21,8 +21,9 @@ React, TypeScript, Tailwind CSS and axios, against the free
 | **Responsive grid** | 1 column on mobile, 2 on tablet, 3 on laptop, 4 on desktop |
 | **Card content** | Icon, name, symbol, USD price, 24h change (green up / red down), market cap and rank |
 | **Search** | Filters by name *or* symbol, case- and whitespace-insensitive |
-| **Sort** | Market cap, price or 24h change, ascending or descending |
+| **Sort** | Market cap (server-side, whole market), price or 24h change (current page) |
 | **Pagination** | Server-side: each page is its own request, separately cached |
+| **Page size** | 10/20/50/100 per page, sent as `per_page` — not a local slice |
 | **Edge cases** | Loading skeletons, error state with retry, empty search state, network-failure recovery |
 | **Bonus** | Server-side pagination, dark/light theme toggle (persisted), and a Playwright E2E suite |
 
@@ -99,7 +100,8 @@ src/
 │   ├── format.ts        price and percentage formatting, trend derivation
 │   └── sort.ts          pure filterCoins / sortCoins
 ├── components/
-│   ├── CoinCard, CoinGrid, SearchBar, SortControls, ThemeToggle, Pagination
+│   ├── CoinCard, CoinGrid, SearchBar, SortControls, ThemeToggle
+│   ├── Pagination (hosts PageSizeSelect)
 │   └── states/          SkeletonGrid, ErrorState, EmptyState
 └── App.tsx              owns search/sort state, picks which state to render
 e2e/                     Playwright specs, fixtures and helpers
@@ -158,6 +160,30 @@ for a 20-row view) or calling CoinGecko's search endpoint, which returns a diffe
 shape with no prices. Rather than hide that, the UI states it — the pager reports the
 rank range you are viewing, and an empty search result says which page it searched.
 
+**Only market cap is sorted by the API — and that is a limitation of the API, not a
+shortcut.** CoinGecko's `order` parameter accepts `market_cap_asc|desc`, `volume_*` and
+`id_*`. It does *not* support price or 24h change, and it does not reject them either:
+
+| `order` sent | HTTP | First three coins |
+|---|---|---|
+| `market_cap_asc` | 200 | namecoin, primecoin, whitecoin ✅ |
+| `volume_desc` | 200 | tether, bitcoin, usd-coin ✅ |
+| `price_desc` | 200 | bitcoin, ethereum, tether ❌ silently market-cap order |
+| `percent_change_24h_desc` | 200 | bitcoin, ethereum, tether ❌ silently market-cap order |
+
+Tether at $0.99 ranking third "by price" is the tell. Wiring all three fields to the API
+would leave two of them quietly broken with no error to debug. So market cap goes to the
+API and spans every coin CoinGecko tracks; price and 24h change are sorted locally over
+the loaded page; and the `MarketsOrder` type is narrowed to the two values that actually
+work, so an ignored value cannot be sent by accident. The sort row states which scope is
+in effect — "across the whole market" or "within this page only".
+
+**Page size is a request parameter, not a local slice.** Choosing 50 fetches 50. It caches
+under its own key and resets to page 1, because page 3 of 20-per-page and page 3 of
+50-per-page point at different coins. The list stops at 100 even though CoinGecko allows
+250: past that the payload and the number of rendered cards cost more than the extra rows
+are worth in a grid you scan.
+
 **"Next" is enabled by page length, not a total count.** CoinGecko does not return a
 total on this endpoint. A full page means "there may be more"; a short page means the
 end. Showing a true page count would cost an extra request for a number the user does
@@ -175,7 +201,7 @@ price movement.
 npm run test:e2e
 ```
 
-**131 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
+**199 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
 viewport-driven responsive tests, scoped to the desktop project so they run once.
 
 | Spec | Covers |
@@ -187,6 +213,9 @@ viewport-driven responsive tests, scoped to the desktop project so they run once
 | `caching.spec.ts` | One request on load; reload served from cache; refresh bypasses it; TTL expiry re-fetches |
 | `api-request.spec.ts` | The outgoing query matches the brief; `per_page` is never `NaN`; no API key header when unset |
 | `pagination.spec.ts` | Pager state and disabled edges; `page=N` reaches the API; short final page ends paging; pages cache independently; a failing page recovers via retry; search/sort scoped to the page; rank-range summary; scroll-to-top |
+| `sort-order.spec.ts` | Market cap round-trips as `order=market_cap_asc\|desc`; the API's ordering is rendered, not re-sorted; order change resets to page 1; orders cache separately; price/24h change never hit the API and no ignored `order` value is ever sent; the scope label |
+| `page-size.spec.ts` | The selector lives with the pager and is labelled; `per_page` reaches the API; the list grows and shrinks; page resets; sizes cache separately; paging and end-of-data respect the size; heading, rank range and search follow it |
+| `unranked-coins.spec.ts` | A coin with `market_cap_rank: null` shows no badge and no dangling `#`; the pager falls back to a coin count instead of claiming the page is empty; partially ranked pages report the ranks that exist |
 | `theme.spec.ts` | Dark mode toggle, round trip, persistence across reload, and the storage key the pre-paint script depends on |
 
 The fixture in `e2e/fixtures/coins.ts` is shaped so each edge case has exactly one
@@ -205,6 +234,8 @@ Beyond the suite, the app was verified against the live API: one network request
   a router would land naturally alongside the detail page above.
 - **Global search across pages** — see the tradeoff note above. Would use CoinGecko's
   `/search` endpoint plus a follow-up markets call to hydrate prices.
+- **Volume as a fourth sort field** — the API genuinely supports `volume_asc|desc`, so it
+  would be another real server-side sort for roughly the cost of one enum value.
 - **Unit tests for `lib/`** — the pure functions are currently covered through the DOM.
   E2E proves the user-visible behaviour, but a Vitest layer over `format.ts` and
   `sort.ts` would pin edge cases faster than a browser round trip.
@@ -217,7 +248,7 @@ Beyond the suite, the app was verified against the live API: one network request
 ## Testing notes
 
 A full TDD evidence report — user journeys, RED/GREEN output for each stage, the
-50 behavioural guarantees and the known gaps — lives in
+69 behavioural guarantees and the known gaps — lives in
 [`docs/testing/crypto-market-dashboard.tdd.md`](docs/testing/crypto-market-dashboard.tdd.md).
 
 ## Licence

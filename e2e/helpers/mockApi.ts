@@ -124,7 +124,7 @@ export async function mockPageTwoFailure(page: Page): Promise<{ recover: () => v
   };
 }
 
-export interface MarketsRequest {
+interface MarketsRequest {
   page: number;
   order: string;
 }
@@ -161,7 +161,7 @@ export async function mockCoinsOrdered(page: Page): Promise<{ requests: MarketsR
   return state;
 }
 
-export interface SizedRequest {
+interface SizedRequest {
   page: number;
   perPage: number;
 }

@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import CoinGrid from './components/CoinGrid';
 import Pagination from './components/Pagination';
-import PageSizeSelect from './components/PageSizeSelect';
 import SearchBar from './components/SearchBar';
 import SortControls from './components/SortControls';
 import ThemeToggle from './components/ThemeToggle';
@@ -179,11 +178,6 @@ function App() {
               onDirectionChange={handleSortDirectionChange}
               disabled={controlsDisabled}
             />
-            <PageSizeSelect
-              value={pageSize}
-              onChange={handlePageSizeChange}
-              disabled={controlsDisabled}
-            />
           </div>
         </header>
 
@@ -200,8 +194,10 @@ function App() {
             hasNextPage={hasNextPage}
             rankRange={rankRange}
             coinCount={coins.length}
+            pageSize={pageSize}
             disabled={loading}
             onPageChange={goToPage}
+            onPageSizeChange={handlePageSizeChange}
           />
         )}
 

@@ -23,6 +23,9 @@ Node 26.5.0. No Jest/RTL — the CRA scaffolding for it was removed deliberately
 | 6 | As a crypto watcher, I want to switch between light and dark themes and have my choice remembered. | `e2e/theme.spec.ts` |
 | 7 | As a crypto watcher, I want repeat visits to reuse recently fetched data, so that the dashboard is instant and does not get rate-limited — while still being able to force a refresh. | `e2e/caching.spec.ts` |
 | 8 | As a crypto watcher, I want to page beyond the top 20, so that I can look further down the market without loading thousands of coins at once. | `e2e/pagination.spec.ts` |
+| 9 | As a crypto watcher, I want sorting by market cap to reorder the whole market rather than just the rows on screen, so that "lowest market cap" means the actual bottom of the market. | `e2e/sort-order.spec.ts` |
+| 10 | As a crypto watcher, I want to choose how many coins a page shows, so that I can scan a short list or a long one. | `e2e/page-size.spec.ts` |
+| 11 | As a crypto watcher sorting to the bottom of the market, I want coins with no rank to display sensibly, so that the dashboard does not show placeholder junk or contradict itself. | `e2e/unranked-coins.spec.ts` |
 
 ---
 
@@ -202,6 +205,65 @@ this task and made module-internal; they are consumed through `pagedFixtures`.
 | Next | first coin Bitcoin Cash, rank #21 — correct continuation |
 | Previous | back to Bitcoin, and pages requested were `1, 2` — no repeat request |
 
+### Task 9 — API-backed market cap sorting (RED → GREEN)
+
+The API was probed **before** writing any code, because the obvious implementation is a
+trap. CoinGecko's `order` accepts `market_cap_asc|desc`, `volume_*` and `id_*`, but for
+price and 24h change it returns **200 with plain market-cap ordering** instead of an error:
+
+| `order` sent | HTTP | First three coins | Verdict |
+|---|---|---|---|
+| `market_cap_desc` | 200 | bitcoin, ethereum, tether | honoured |
+| `market_cap_asc` | 200 | namecoin, primecoin, whitecoin | honoured |
+| `volume_desc` | 200 | tether, bitcoin, usd-coin | honoured |
+| `price_desc` | 200 | bitcoin, ethereum, tether | **ignored** |
+| `price_asc` | 200 | bitcoin first | **ignored** |
+| `percent_change_24h_desc` | 200 | bitcoin, ethereum, tether | **ignored** |
+
+Wiring all three sort fields to the API would have shipped two silently broken sorts. So
+market cap goes to the API; price and 24h change stay local; `MarketsOrder` is narrowed to
+the two working values so an ignored one cannot be sent by accident; and the UI labels the
+scope.
+
+- **RED:** `8 failed, 4 passed` (`1a8e5f6`). The 4 passes are pre-existing guarantees —
+  price/change already never hit the API because `order` was hardcoded — kept in the spec
+  because they must continue to hold.
+- **GREEN:** `12 passed` on the spec, `155 passed, 5 skipped` overall (`408cadd`).
+
+### Task 10 — Page-size selector (RED → GREEN), plus a nullable-rank bug
+
+- **RED:** `13 failed` (`8fc5aed`) — no `page-size` control existed.
+- **Implementation:** `per_page` threaded through `fetchCoins`/`useCoins`, included in
+  both the cache key and the in-flight key, with page reset on change.
+
+Driving it against the live API then exposed a **typing bug**:
+
+```
+order=market_cap_asc&per_page=3
+  namecoin   market_cap_rank=None  market_cap=0.0
+  primecoin  market_cap_rank=None  market_cap=0.0
+```
+
+`CoinMarketResponse` declared `market_cap_rank: number`. Two visible defects followed: a
+dangling `#` on every card, and the pager reading *"No coins on this page."* above 50
+rendered coins.
+
+- **RED:** `3 failed, 4 passed` (`083278f`)
+- **Fix:** the rank is `number | null` in both the wire and domain types, the mapping
+  guards it, the badge renders only when a rank exists, and `Pagination` now distinguishes
+  an empty page from a page whose coins carry no rank.
+- **GREEN:** `20 passed` across both specs, `195 passed, 5 skipped` overall (`1ea0fcc`).
+
+### Task 11 — Move the page-size control into the pager (RED → GREEN)
+
+Feedback: the selector belonged with the pagination controls, not crowding the search and
+sort row.
+
+- **RED:** `2 failed, 13 passed` — placement and accessible-name assertions.
+- **GREEN:** `15 passed` on the spec, `199 passed, 5 skipped` overall.
+
+Two helper interfaces flagged by knip after this task were made module-internal.
+
 ---
 
 ## Test specification
@@ -258,6 +320,25 @@ this task and made module-internal; they are consumed through `pagedFixtures`.
 | 48 | Search and sort apply to the loaded page; the query survives a page change; the empty state names the page | `pagination.spec.ts:interaction with search and sort` | e2e | PASS |
 | 49 | The pager reports the true market-cap rank range, including on a short page | `pagination.spec.ts:rank range summary` | e2e | PASS |
 | 50 | Changing page scrolls back to the top | `pagination.spec.ts:scrolls back to the top` | e2e | PASS |
+| 51 | `order=market_cap_desc` is sent on first load | `sort-order.spec.ts:sends order=market_cap_desc on first load` | e2e | PASS |
+| 52 | Switching to low-to-high sends `order=market_cap_asc` | `sort-order.spec.ts:sends order=market_cap_asc` | e2e | PASS |
+| 53 | The API's ordering is rendered, not re-sorted locally | `sort-order.spec.ts:renders the order the API returned` | e2e | PASS |
+| 54 | Changing the global order resets to page 1 | `sort-order.spec.ts:goes back to page 1` | e2e | PASS |
+| 55 | Each order caches separately | `sort-order.spec.ts:caches each order separately` | e2e | PASS |
+| 56 | Price and 24h change never trigger a request | `sort-order.spec.ts:does not hit the API when switching to price` / `to 24h change` | e2e | PASS |
+| 57 | No `order` value the API silently ignores is ever sent | `sort-order.spec.ts:never sends an order value the API silently ignores` | e2e | PASS |
+| 58 | Switching from market cap to a local field does not refetch | `sort-order.spec.ts:keeps the fetched pool` | e2e | PASS |
+| 59 | The UI states whether a sort is market-wide or page-scoped | `sort-order.spec.ts:the UI says which scope applies` | e2e | PASS |
+| 60 | The page-size control defaults to the configured size, sits with the pager, and is labelled | `page-size.spec.ts:the control` | e2e | PASS |
+| 61 | Changing the size sends the new `per_page` and renders that many coins | `page-size.spec.ts:requests the new size` / `renders as many coins` / `shrinks the list` | e2e | PASS |
+| 62 | Changing the size returns to page 1 | `page-size.spec.ts:returns to page 1` | e2e | PASS |
+| 63 | Each size caches separately | `page-size.spec.ts:caches each size separately` | e2e | PASS |
+| 64 | Paging and end-of-data respect the chosen size | `page-size.spec.ts:pages at the chosen size` / `detects the last page` | e2e | PASS |
+| 65 | Rank range, heading and search follow the chosen size | `page-size.spec.ts:reports the rank range` / `the rest of the UI keeps up` | e2e | PASS |
+| 66 | A coin with no rank renders no badge and no dangling `#` | `unranked-coins.spec.ts:renders no rank badge` | e2e | PASS |
+| 67 | A ranked coin still shows its badge on a partially ranked page | `unranked-coins.spec.ts:a ranked coin still shows its rank badge` | e2e | PASS |
+| 68 | The pager reports a coin count when no coin carries a rank, and the ranks that exist when some do | `unranked-coins.spec.ts:the pager summary` | e2e | PASS |
+| 69 | An unranked page leaks no NaN/undefined/null | `unranked-coins.spec.ts:leaks no NaN` | e2e | PASS |
 
 ---
 
@@ -266,7 +347,7 @@ this task and made module-internal; they are consumed through `pagedFixtures`.
 No line-coverage number is reported. Playwright is a black-box browser runner, and
 `react-scripts` provides no instrumentation hook for it without ejecting or adding a
 second runner — which would defeat the single-runner decision. Coverage is instead stated
-as behavioural coverage: the 50 guarantees above map onto every numbered requirement in
+as behavioural coverage: the 69 guarantees above map onto every numbered requirement in
 `docs/INTERVIEW_TASK.md`, including all four listed edge cases.
 
 **Deliberate gaps:**
@@ -298,11 +379,18 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
 
 - **RED:** 43/43 Playwright tests failed on `[data-testid=coin-card]` not found, before
   any feature code existed (`a26ca25`).
-- **GREEN:** 131 passed / 5 skipped after implementation, the rounding fix, the
-  environment-configuration refactor, the dead-code cleanup and server-side pagination,
-  with `tsc --noEmit` clean, `npm run build` compiling and `knip` reporting no unused
-  files, exports or dependencies.
+- **GREEN:** 199 passed / 5 skipped after implementation, the rounding fix, the
+  environment-configuration refactor, the dead-code cleanup, server-side pagination,
+  API-backed market cap sorting and the page-size selector — with `tsc --noEmit` clean,
+  `npm run build` compiling and `knip` reporting no unused files, exports or dependencies.
 - **Second bug found by looking at the rendered page, fixed under test:** the header
   claimed "Top 20" while showing ranks 21-40 (`RED 4 failed -> GREEN 17 passed`).
+- **Third bug, found by driving the live API:** `market_cap_rank` is nullable at the
+  bottom of the market, producing a dangling `#` on every card and a pager claiming an
+  empty page above 50 coins (`RED 3 failed -> GREEN 20 passed`).
+- **A trap avoided by probing the API before coding:** CoinGecko silently ignores
+  `order=price_*` and `order=percent_change_24h_*`, answering 200 with market-cap order.
+  Only market cap is sent server-side; the type system now makes the alternative
+  unrepresentable.
 - **Bug found and fixed under test:** 24h changes that round to zero rendered as red
   losses; found by driving the live API, fixed RED→GREEN (`caae21d`).
