@@ -36,7 +36,34 @@ npm install
 npm start          # http://localhost:3000
 ```
 
-No API key or `.env` file is needed — the CoinGecko markets endpoint is public.
+No API key or setup is needed — the CoinGecko markets endpoint is public, and `.env`
+ships with working defaults.
+
+### Configuration
+
+All configuration is optional. `.env` is committed with non-secret defaults so the app
+runs with zero setup; `.env.example` documents every variable. To override anything —
+including a real API key — copy it to `.env.local`, which is gitignored:
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `REACT_APP_COINGECKO_BASE_URL` | `https://api.coingecko.com/api/v3` | API root. Use `https://pro-api.coingecko.com/api/v3` with a Pro key. |
+| `REACT_APP_COINGECKO_API_KEY` | *(blank)* | Optional key; raises the rate limit. Blank means unauthenticated. |
+| `REACT_APP_COINGECKO_API_KEY_HEADER` | `x-cg-demo-api-key` | Demo plans use this; Pro plans use `x-cg-pro-api-key`. |
+| `REACT_APP_COINS_PER_PAGE` | `20` | How many coins to request. |
+| `REACT_APP_CACHE_TTL_MS` | `60000` | How long a fetched list stays fresh. |
+| `REACT_APP_REQUEST_TIMEOUT_MS` | `10000` | Per-request timeout. |
+
+Two things worth knowing. Create React App inlines `REACT_APP_*` at **build** time, so
+restart `npm start` after editing. And every value is validated in `src/config/env.ts` —
+a malformed number falls back to its default rather than becoming `per_page=NaN` in a
+live request.
+
+**Never put a real key in `.env`** — it is committed. That is what `.env.local` is for.
 
 ### Scripts
 
@@ -61,6 +88,7 @@ src/
 ├── api/
 │   ├── client.ts        axios instance, retry interceptor, error→message mapping
 │   └── coins.ts         typed fetch + request coalescing + cache key
+├── config/env.ts        REACT_APP_* config with validation and defaults
 ├── types/coin.ts        CoinMarketResponse (wire) and Coin (domain)
 ├── hooks/
 │   ├── useCoins.ts      loading / error / data, retry and force-refresh
@@ -133,7 +161,7 @@ price movement.
 npm run test:e2e
 ```
 
-**89 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
+**95 passed, 5 skipped** across a desktop and a mobile project. The 5 skips are the
 viewport-driven responsive tests, scoped to the desktop project so they run once.
 
 | Spec | Covers |
@@ -143,6 +171,7 @@ viewport-driven responsive tests, scoped to the desktop project so they run once
 | `edge-cases.spec.ts` | Skeletons while loading; 500 and 429 error states; retry that actually recovers; dropped connection; empty search results |
 | `responsive.spec.ts` | 1/2/3/4 columns at 390/768/1024/1440px; no horizontal overflow at 320px |
 | `caching.spec.ts` | One request on load; reload served from cache; refresh bypasses it; TTL expiry re-fetches |
+| `api-request.spec.ts` | The outgoing query matches the brief; `per_page` is never `NaN`; no API key header when unset |
 | `theme.spec.ts` | Dark mode toggle, round trip, and persistence across reload |
 
 The fixture in `e2e/fixtures/coins.ts` is shaped so each edge case has exactly one
@@ -170,7 +199,7 @@ Beyond the suite, the app was verified against the live API: one network request
 ## Testing notes
 
 A full TDD evidence report — user journeys, RED/GREEN output for each stage, the
-38 behavioural guarantees and the known gaps — lives in
+41 behavioural guarantees and the known gaps — lives in
 [`docs/testing/crypto-market-dashboard.tdd.md`](docs/testing/crypto-market-dashboard.tdd.md).
 
 ## Licence

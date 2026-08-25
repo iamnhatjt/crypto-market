@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { config } from '../config/env';
 import { Coin, CoinMarketResponse } from '../types/coin';
 
 export const COINS_CACHE_KEY = 'crypto-dashboard:coins:markets:usd';
@@ -8,7 +9,7 @@ const MARKETS_PATH = '/coins/markets';
 const MARKETS_PARAMS = {
   vs_currency: 'usd',
   order: 'market_cap_desc',
-  per_page: 20,
+  per_page: config.perPage,
   page: 1,
   sparkline: false,
 } as const;

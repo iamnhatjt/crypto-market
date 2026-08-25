@@ -13,6 +13,9 @@
 
 # misc
 .DS_Store
+
+# `.env` is intentionally COMMITTED: it holds non-secret defaults so the app
+# runs with zero setup. Real keys belong in `.env.local`, which is ignored.
 .env.local
 .env.development.local
 .env.test.local

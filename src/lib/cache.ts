@@ -10,7 +10,9 @@
  * All storage access is defensive — Safari private mode and blocked-cookie
  * settings make sessionStorage throw rather than return null.
  */
-export const CACHE_TTL_MS = 60_000;
+import { config } from '../config/env';
+
+export const CACHE_TTL_MS = config.cacheTtlMs;
 
 interface CacheEntry<T> {
   storedAt: number;

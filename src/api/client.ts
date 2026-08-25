@@ -1,10 +1,22 @@
-import axios, { AxiosError, AxiosRequestConfig, AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosRequestConfig, AxiosInstance, RawAxiosRequestHeaders } from 'axios';
+import { config } from '../config/env';
 
-export const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
-
-const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_RETRIES = 2;
 const RETRY_BASE_DELAY_MS = 300;
+
+/**
+ * Only send the key header when a key is actually configured — CoinGecko
+ * rejects an empty `x-cg-demo-api-key` rather than ignoring it.
+ */
+function buildHeaders(): RawAxiosRequestHeaders {
+  const headers: RawAxiosRequestHeaders = { Accept: 'application/json' };
+
+  if (config.apiKey !== null) {
+    headers[config.apiKeyHeader] = config.apiKey;
+  }
+
+  return headers;
+}
 
 /** Per-request retry bookkeeping, carried on the config axios hands back to us. */
 interface RetryableConfig extends AxiosRequestConfig {
@@ -12,9 +24,9 @@ interface RetryableConfig extends AxiosRequestConfig {
 }
 
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: COINGECKO_BASE_URL,
-  timeout: REQUEST_TIMEOUT_MS,
-  headers: { Accept: 'application/json' },
+  baseURL: config.baseUrl,
+  timeout: config.requestTimeoutMs,
+  headers: buildHeaders(),
 });
 
 /**
@@ -70,7 +82,13 @@ export function toErrorMessage(error: unknown): string {
     const status = error.response?.status;
 
     if (status === 429) {
-      return 'CoinGecko is rate-limiting this request. Please wait a moment and try again.';
+      return config.apiKey === null
+        ? 'CoinGecko is rate-limiting this request. Please wait a moment, or add an API key, and try again.'
+        : 'CoinGecko is rate-limiting this request. Please wait a moment and try again.';
+    }
+
+    if (status === 401 || status === 403) {
+      return 'CoinGecko rejected the API key. Check REACT_APP_COINGECKO_API_KEY.';
     }
 
     if (status !== undefined && status >= 500) {

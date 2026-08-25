@@ -97,6 +97,43 @@ CoinGecko endpoint in a headless browser.
 - **GREEN output:** `89 passed, 5 skipped (14.6s)`
 - **Commit:** `caae21d fix: treat a 24h change that rounds to zero as flat, not a loss`
 
+### Task 6 — Environment configuration (refactor, no RED gate)
+
+Extracting the base URL, page size, cache TTL, request timeout and an optional API key
+into `src/config/env.ts` is behaviour-preserving at default config: there is no new
+user-visible behaviour, so there is no honest RED state to show. This is the refactor
+stage of the cycle, and the bar is that the suite stays green.
+
+Instead of a fabricated RED, three regression guards were added on the outgoing request
+(`e2e/api-request.spec.ts`). They passed on first run, which is the expected result for a
+guard over existing behaviour — recorded here as such rather than presented as a TDD
+cycle.
+
+- **Command:** `npx playwright test`
+- **Output:** `95 passed, 5 skipped (14.4s)`
+- **Also verified:** `npx tsc --noEmit` clean; `Compiled successfully.`
+
+Because CRA inlines `REACT_APP_*` at build time, non-default values cannot be exercised
+from the committed suite without a rebuild. They were verified by running a second dev
+server with overrides and inspecting the real outgoing request:
+
+| Env override | Observed | Verdict |
+|---|---|---|
+| `REACT_APP_COINS_PER_PAGE=5` | request sent `per_page=5`; 5 cards rendered | applied |
+| `REACT_APP_COINGECKO_API_KEY=test-key-abc123` | request carried `x-cg-demo-api-key: test-key-abc123` | applied |
+| `REACT_APP_COINS_PER_PAGE=not-a-number` | request sent `per_page=20` | fell back, no `NaN` |
+| *(key unset, shipped default)* | no `x-cg-demo-api-key` header present at all | correct |
+
+The last two matter most: a malformed number must not reach the API as `per_page=NaN`,
+and an empty key must not be sent as an empty header, because CoinGecko rejects that
+rather than ignoring it.
+
+A note on process, recorded because it cost a debugging cycle: an intermediate run
+reported `95 failed`. The cause was running `npx playwright test` twice back to back —
+the second run could not bind port 3000 while the first run's CRA dev server was still
+shutting down, so nothing was being served. No application defect; the same suite passed
+immediately against a stable server. Worth knowing when reading CI logs.
+
 ---
 
 ## Test specification
@@ -141,6 +178,9 @@ CoinGecko endpoint in a headless browser.
 | 36 | An expired cache entry triggers a re-fetch | `caching.spec.ts:re-fetches once the cached entry has expired` | e2e | PASS |
 | 37 | Theme toggles to dark and back | `theme.spec.ts:toggles the document into dark mode` / `back to light` | e2e | PASS |
 | 38 | Theme survives a reload | `theme.spec.ts:remembers the chosen theme across a reload` | e2e | PASS |
+| 39 | The request carries vs_currency=usd, market_cap_desc, per_page=20, page=1, sparkline=false | `api-request.spec.ts:requests the top 20 USD markets` | e2e | PASS |
+| 40 | `per_page` is always a positive integer, never NaN | `api-request.spec.ts:sends a numeric per_page` | e2e | PASS |
+| 41 | No API key header is sent when no key is configured | `api-request.spec.ts:omits the API key header entirely` | e2e | PASS |
 
 ---
 
@@ -149,7 +189,7 @@ CoinGecko endpoint in a headless browser.
 No line-coverage number is reported. Playwright is a black-box browser runner, and
 `react-scripts` provides no instrumentation hook for it without ejecting or adding a
 second runner — which would defeat the single-runner decision. Coverage is instead stated
-as behavioural coverage: the 38 guarantees above map onto every numbered requirement in
+as behavioural coverage: the 41 guarantees above map onto every numbered requirement in
 `docs/INTERVIEW_TASK.md`, including all four listed edge cases.
 
 **Deliberate gaps:**
@@ -177,7 +217,8 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
 
 - **RED:** 43/43 Playwright tests failed on `[data-testid=coin-card]` not found, before
   any feature code existed (`a26ca25`).
-- **GREEN:** 89 passed / 5 skipped after implementation and the rounding fix
-  (`106ba78`, `caae21d`), with `tsc --noEmit` clean and `npm run build` compiling.
+- **GREEN:** 95 passed / 5 skipped after implementation, the rounding fix and the
+  environment-configuration refactor, with `tsc --noEmit` clean and `npm run build`
+  compiling.
 - **Bug found and fixed under test:** 24h changes that round to zero rendered as red
   losses; found by driving the live API, fixed RED→GREEN (`caae21d`).
