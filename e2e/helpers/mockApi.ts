@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { bitcoinDetailFixture, CoinDetailFixture } from '../fixtures/detail';
+import { makeSeries, MarketChartFixture } from '../fixtures/chart';
 import {
   coinsFixture,
   coinsServerOrderedFixture,
@@ -350,6 +351,64 @@ export async function mockCoinDetail(
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(options?.detail ?? bitcoinDetailFixture),
+    });
+  });
+
+  return state;
+}
+
+/** Matches only the nested chart path, never `/coins/{id}` or `/coins/markets`. */
+const COIN_CHART_ROUTE = /\/api\/v3\/coins\/[^/?]+\/market_chart/;
+
+interface ChartMockState {
+  /** The `days` value of each request, in order. */
+  requestedDays: string[];
+  recover: () => void;
+}
+
+export async function mockCoinChart(
+  page: Page,
+  options?: {
+    /** Series used for every range. */
+    series?: MarketChartFixture;
+    /** Per-range series, keyed by the `days` value. Takes precedence. */
+    byDays?: Record<string, MarketChartFixture>;
+    status?: number;
+    failUntilRecovered?: boolean;
+    delayMs?: number;
+  }
+): Promise<ChartMockState> {
+  const state = { requestedDays: [] as string[], recover: () => {} };
+  let failing = options?.failUntilRecovered ?? false;
+  state.recover = () => {
+    failing = false;
+  };
+
+  await page.route(COIN_CHART_ROUTE, async (route) => {
+    const days = new URL(route.request().url()).searchParams.get('days') ?? '';
+    state.requestedDays.push(days);
+
+    if (options?.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+    }
+
+    const status = failing ? 500 : (options?.status ?? 200);
+
+    if (status >= 400) {
+      return route.fulfill({
+        status,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'chart unavailable' }),
+      });
+    }
+
+    const body =
+      options?.byDays?.[days] ?? options?.series ?? makeSeries(Number(days) > 1 ? 169 : 289);
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
     });
   });
 
