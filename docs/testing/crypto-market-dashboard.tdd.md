@@ -27,6 +27,9 @@ Node 26.5.0. No Jest/RTL — the CRA scaffolding for it was removed deliberately
 | 10 | As a crypto watcher, I want to choose how many coins a page shows, so that I can scan a short list or a long one. | `e2e/page-size.spec.ts` |
 | 11 | As a crypto watcher sorting to the bottom of the market, I want coins with no rank to display sensibly, so that the dashboard does not show placeholder junk or contradict itself. | `e2e/unranked-coins.spec.ts` |
 | 12 | As a crypto watcher, I want the search box to find any coin CoinGecko knows about, not just the rows on screen, without firing a request per keystroke. | `e2e/search-api.spec.ts` |
+| 13 | As a crypto watcher, I want to open a coin from the list and land on its own page with a shareable URL. | `e2e/coin-detail.spec.ts` |
+| 14 | As a crypto watcher on a coin's page, I want its key market figures and a short description. | `e2e/coin-stats.spec.ts` |
+| 15 | As a crypto watcher, I want to see a coin's price over a range I choose, so that I can tell whether today's move is noise or a trend. | `e2e/price-chart.spec.ts` |
 
 ---
 
@@ -326,6 +329,77 @@ Five dead exports flagged by knip after these tasks were made module-internal, a
 unused import failed `CI=true npm run build` (CRA treats lint warnings as errors) — caught
 because the build is part of the verification, not just `tsc`.
 
+### Task 14 — Coin detail routing (RED → GREEN)
+
+Plan phase 1. The plan flagged two unresolved API risks, settled before any code:
+
+```
+market_chart?days=90   -> 2161 points, hourly            OK
+market_chart?days=365  -> 366 points, daily              OK  (the earlier
+                                                          failure was rate
+                                                          limiting, not a
+                                                          free-tier limit)
+market_chart?days=max  -> error 10012                    rejected
+/coins/not-a-real-coin -> HTTP 404 "coin not found"
+```
+
+- **RED:** `8 failed` (`adcf9ff`) · **GREEN:** `8 passed`, `243 passed` overall (`7f88c80`)
+
+`react-router-dom` 7.18.2 is the one new dependency. Theme state moved into a
+`ThemeProvider`, because both routes render a toggle and calling `useTheme` in each would
+have created two states writing to the same `<html>` class and localStorage key.
+
+### Task 15 — Coin detail statistics (RED → GREEN)
+
+Plan phase 2. `/coins/{id}` differs from `/coins/markets` in ways easy to guess wrong, so
+the shape was pinned live first: `image` is an object not a string, `market_cap_rank` sits
+at the top level, and the monetary fields are dicts keyed by currency while the
+percentages and supplies are plain numbers.
+
+- **RED:** `21 failed, 1 passed` (`2b67fca`) · **GREEN:** `22 passed`, `287 passed` overall (`93777d4`)
+
+The single initial pass is a guard on the fixture's own shape — it is meant to pass, and
+exists to fail if the fixture later drifts from the response the API actually sends.
+
+One test is a security guarantee rather than a feature: the description is rendered as
+text, and the test serves markup containing an anchor plus an `img` with an `onerror`
+handler to prove neither enters the DOM.
+
+### Task 16 — Price chart and ranges (RED → GREEN)
+
+Plan phases 3–5, run as one cycle: chart geometry cannot be observed without a series to
+draw and a range control to switch, so splitting them would have produced a phase with no
+honest RED.
+
+- **RED:** `23 failed, 1 passed` (`1a3433b`) · **GREEN:** `26 passed`, `338 passed` overall (`dd89c49`)
+
+Inline SVG was chosen over a chart library specifically because this project tests only
+through Playwright: an SVG path exposes its point count, labels and tooltip to ordinary
+assertions, whereas a canvas needs pixel snapshots.
+
+**Two defects found by running it, not by the spec:**
+
+1. *Touch.* The tooltip was mouse-only and unusable on a phone. Switched to pointer
+   events — and `pointerleave` now clears only for a mouse, because a tap fires
+   `pointerleave` the instant it ends, which made the tooltip flash and vanish. Hover and
+   tap are now tested on the desktop and mobile projects respectively.
+2. *Price precision.* Live chart data rendered `High $2,524.34151352`. `/coins/markets`
+   returns pre-rounded prices but chart series carry raw floats, so the 8-decimal
+   sub-cent formatter over-applied. `formatPrice` now scales precision by magnitude.
+   The full suite passed unchanged after the fix, which confirms every pre-existing price
+   expectation already agreed with the magnitude rule.
+
+**Three of my own test defects were corrected rather than accommodated**, recorded because
+each could have been "fixed" by weakening the code instead:
+
+- asserted 721 plotted points for the 30-day range, forgetting the 600-point downsample
+  cap makes it 361. Switched to a series under the cap, leaving downsampling to its own test.
+- asserted an exact `$199.00` on a tap two pixels from the edge, which maps to a different
+  index at mobile width. Now asserts a point near where the tap landed.
+- asserted `toContainText('$2,524.34')`, which passes against `$2,524.34151352` as a
+  prefix — so the precision bug appeared fixed when it was not. Tightened to exact text,
+  which produced the real RED.
+
 ---
 
 ## Test specification
@@ -414,6 +488,25 @@ because the build is part of the verification, not just `tsc`.
 | 80 | No hydration call is made when nothing matched | `search-api.spec.ts:skips the hydration call` | e2e | PASS |
 | 81 | The latest query wins, and a repeat query is served from cache | `search-api.spec.ts:races and caching` | e2e | PASS |
 | 82 | The pager hides while searching and the previous page is restored on clear | `search-api.spec.ts:browse and search modes` | e2e | PASS |
+| 83 | Each card is a real anchor to its coin URL | `coin-detail.spec.ts:each card is a real link` | e2e | PASS |
+| 84 | Clicking a card opens that coin; the back link and browser back both return | `coin-detail.spec.ts:navigating in` / `navigating out` | e2e | PASS |
+| 85 | A coin URL deep-links directly; an unknown route shows a not-found page | `coin-detail.spec.ts:deep linking` | e2e | PASS |
+| 86 | The theme toggle works on the detail page and shares one state | `coin-detail.spec.ts:the theme toggle still works` | e2e | PASS |
+| 87 | Identity, price and 24h change render for the coin named in the URL | `coin-stats.spec.ts:identity` | e2e | PASS |
+| 88 | Nine market statistics render, including ATH and ATL with their dates | `coin-stats.spec.ts:market statistics` | e2e | PASS |
+| 89 | Missing figures render a placeholder, never NaN, a blank, or a bare rank | `coin-stats.spec.ts:missing figures` | e2e | PASS |
+| 90 | Description markup renders as text; no anchor or img enters the DOM | `coin-stats.spec.ts:renders markup in the description as text` | e2e | PASS |
+| 91 | A 404 shows an error with retry that recovers, back link still reachable | `coin-stats.spec.ts:failure and loading` | e2e | PASS |
+| 92 | The chart plots every point, labels the high and low, and colours by trend | `price-chart.spec.ts:rendering` | e2e | PASS |
+| 93 | Full-precision prices round to cents; sub-cent series keep precision | `price-chart.spec.ts:rounds a full-precision price` | e2e | PASS |
+| 94 | Each range requests its `days`, marks itself active, and caches separately | `price-chart.spec.ts:ranges` | e2e | PASS |
+| 95 | Changing range does not refetch the coin detail | `price-chart.spec.ts:changing range does not refetch` | e2e | PASS |
+| 96 | No `max` range is offered, since the API rejects it | `price-chart.spec.ts:does not offer a range the API rejects` | e2e | PASS |
+| 97 | Hover shows the price at that point and clears on leave | `price-chart.spec.ts:hovering` | e2e | PASS |
+| 98 | A tap reveals the price on a touch device | `price-chart.spec.ts:touch` | e2e | PASS |
+| 99 | Empty, single-point and all-identical series render without NaN | `price-chart.spec.ts:awkward series` | e2e | PASS |
+| 100 | A 2500-point series is downsampled but keeps its true high and low | `price-chart.spec.ts:a long series is downsampled` | e2e | PASS |
+| 101 | A chart error leaves the statistics intact and retries independently | `price-chart.spec.ts:failure` | e2e | PASS |
 
 ---
 
@@ -422,7 +515,7 @@ because the build is part of the verification, not just `tsc`.
 No line-coverage number is reported. Playwright is a black-box browser runner, and
 `react-scripts` provides no instrumentation hook for it without ejecting or adding a
 second runner — which would defeat the single-runner decision. Coverage is instead stated
-as behavioural coverage: the 82 guarantees above map onto every numbered requirement in
+as behavioural coverage: the 101 guarantees above map onto every numbered requirement in
 `docs/INTERVIEW_TASK.md`, including all four listed edge cases.
 
 **Deliberate gaps:**
@@ -435,8 +528,9 @@ as behavioural coverage: the 82 guarantees above map onto every numbered require
 - **Live API is not exercised by the suite.** By design — a live call cannot be asked for
   a 500 or a dropped connection, and would flake on rate limits. Live behaviour was
   verified manually instead, and that is what found the `-0.00%` bug.
-- **Coin detail page is not implemented**, so it is untested. It is a bonus item in the
-  brief and called out in the README. Pagination *is* now implemented and covered.
+- **Coin detail page and price chart are now implemented and covered.** What remains
+  untested because unimplemented: comparing two coins on one chart, and candlesticks via
+  `/ohlc`.
 - **The page number is not in the URL**, so a page cannot be linked or survive a refresh.
   Untested because unimplemented; noted in the README.
 - **Search is now global**, so the earlier page-scoped limitation is gone.
@@ -456,11 +550,14 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
 
 - **RED:** 43/43 Playwright tests failed on `[data-testid=coin-card]` not found, before
   any feature code existed (`a26ca25`).
-- **GREEN:** 227 passed / 5 skipped after implementation, the rounding fix, the
+- **GREEN:** 338 passed / 8 skipped after implementation, the rounding fix, the
   environment-configuration refactor, the dead-code cleanup, server-side pagination, the
-  page-size selector, debounced API-backed search and the restriction of sorting to
-  API-supported fields — with `tsc --noEmit` clean, `CI=true npm run build` compiling and
-  `knip` reporting no unused files, exports or dependencies.
+  page-size selector, debounced API-backed search, the restriction of sorting to
+  API-supported fields, and the coin detail page with its price chart — with
+  `tsc --noEmit` clean, `CI=true npm run build` compiling and `knip` reporting no unused
+  files, exports or dependencies.
+- The 8 skips are project-scoped by design: viewport-driven responsive tests on desktop
+  only, mouse-hover on desktop only, and the touch equivalent on mobile only.
 - **Second bug found by looking at the rendered page, fixed under test:** the header
   claimed "Top 20" while showing ranks 21-40 (`RED 4 failed -> GREEN 17 passed`).
 - **Third bug, found by driving the live API:** `market_cap_rank` is nullable at the
@@ -473,5 +570,8 @@ If these checkpoint commits are squashed, this is the summary to carry forward:
 - **A reversed decision, for a stated reason:** search originally had no debounce, which
   was right for an in-memory filter and wrong once the keystroke triggered two network
   requests.
+- **Fourth bug found by driving the live API:** `formatPrice` rendered eight decimal
+  places on four-figure chart prices, because chart series carry raw floats while
+  `/coins/markets` pre-rounds (`RED 1 failed -> GREEN 338 passed`).
 - **Bug found and fixed under test:** 24h changes that round to zero rendered as red
   losses; found by driving the live API, fixed RED→GREEN (`caae21d`).

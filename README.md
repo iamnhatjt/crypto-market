@@ -6,7 +6,9 @@ against the free [CoinGecko API](https://docs.coingecko.com/reference/coins-mark
 ![Dashboard](docs/screenshot-light.png)
 
 <details>
-<summary>Dark theme</summary>
+<summary>Coin detail page, and dark theme</summary>
+
+![Coin detail page](docs/screenshot-detail.png)
 
 ![Dashboard, dark theme](docs/screenshot-dark.png)
 
@@ -22,8 +24,10 @@ against the free [CoinGecko API](https://docs.coingecko.com/reference/coins-mark
 | **Search** | Debounced keyword search via the API, across the whole market |
 | **Sort** | Market cap or 24h volume, both server-side |
 | **Paging** | Server-side, one request per page, 10/20/50/100 per page |
+| **Detail page** | Own URL per coin, market stats, description |
+| **Chart** | Inline SVG price history, 24H/7D/30D/90D/1Y, hover or tap to inspect |
 | **States** | Loading skeletons, error + retry, empty results, network recovery |
-| **Bonus** | Dark/light theme (persisted), 227 Playwright E2E tests |
+| **Bonus** | Dark/light theme (persisted), 338 Playwright E2E tests |
 
 ## Quick start
 
@@ -34,7 +38,7 @@ npm install
 npm start                    # http://localhost:3000
 
 npx playwright install chromium   # once
-npm test                     # 227 passed, 5 skipped
+npm test                     # 338 passed, 8 skipped
 ```
 
 No API key needed — the endpoint is public and `.env` ships with working defaults.
@@ -70,13 +74,16 @@ restart after editing. Malformed values fall back to their default.
 ```
 src/
 ├── api/         client.ts (axios + retry)  coins.ts  search.ts
+│                coinDetail.ts  coinChart.ts
 ├── config/      env.ts — REACT_APP_* with validation and defaults
-├── types/       CoinMarketResponse (wire) → Coin (domain)
-├── hooks/       useCoins  useCoinSearch  useDebouncedValue  useTheme
-├── lib/         cache.ts (TTL)  format.ts
-├── components/  CoinCard CoinGrid SearchBar SortControls ThemeToggle
-│                Pagination (hosts PageSizeSelect)  states/
-└── App.tsx      owns query/sort/page state
+├── types/       wire responses → domain models, all nullable fields typed
+├── hooks/       useCoins  useCoinSearch  useCoinDetail  useCoinChart
+│                useDebouncedValue  useTheme
+├── lib/         cache.ts (TTL)  format.ts  chart.ts (pure SVG geometry)
+├── components/  CoinCard CoinGrid SearchBar SortControls Pagination
+│                PriceChart ChartRangeSelect StatGrid ThemeProvider  states/
+├── pages/       DashboardPage  CoinDetailPage  NotFoundPage
+└── App.tsx      router shell
 e2e/             Playwright specs, fixtures, mocks
 ```
 
@@ -97,6 +104,23 @@ is a template union of field × direction, making an ignored value unrepresentab
 filter, wrong once a keystroke costs two requests. Responses for superseded queries are
 discarded. Search covers the whole market, so the pager hides while it is active.
 
+**The chart is hand-written SVG, not a chart library.** The deciding factor was
+testability, not bundle size: this project tests only through Playwright, and a canvas
+chart (Chart.js, lightweight-charts) needs pixel snapshots, while an SVG path exposes its
+point count, labels and tooltip to ordinary assertions. It also costs no dependency.
+Points are capped at 600 — the 90-day range returns ~2161 hourly points for an ~800px
+chart — with the true high and low always retained, since those are the values a reader
+is looking for.
+
+**The detail page issues two independent requests.** Stats come from `/coins/{id}` and
+the series from `/coins/{id}/market_chart`, so a chart failure leaves the figures on
+screen and switching range never refetches the description. `days=max` is not offered:
+the free tier rejects it with error 10012, capping history at 365 days.
+
+**Coin descriptions are rendered as text, never as HTML.** CoinGecko embeds `<a>` tags in
+them; a test serves a description containing an anchor and an `img` with an `onerror`
+handler to prove neither reaches the DOM.
+
 **Nothing is sorted or filtered locally.** The API is the single source of ordering, which
 is why `src/lib/sort.ts` doesn't exist.
 
@@ -109,8 +133,11 @@ mode makes `sessionStorage` *throw*.
 **Retries are selective.** Two retries, 300/600ms backoff, on 429s, 5xx, timeouts and
 dropped connections — never on 4xx, which means our request was wrong.
 
-**One price formatter for the whole range.** `Intl.NumberFormat` with 2–8 fraction digits
-renders BTC as `$80,819.00` and SHIB as `$0.00002341`. Trend follows the *rounded* value,
+**Price precision follows magnitude.** Two decimals at or above a dollar, up to eight
+below it — so BTC reads `$80,819.00` and SHIB `$0.00002341`. A single 8-decimal formatter
+looked fine until chart data arrived: `/coins/markets` returns pre-rounded prices but
+chart series carry raw floats, which surfaced as `High $2,524.34151352`. Trend follows the
+*rounded* value,
 so a stablecoin at `-0.0004%` shows a neutral `0.00%`, not a red loss. Nullable fields
 (`market_cap_rank`, `price_change_percentage_24h`) are typed as such — both are genuinely
 null at the bottom of the market.
@@ -125,7 +152,7 @@ Playwright only, every request mocked — that's what makes a 500, a dropped con
 a null 24h change assertable on demand, and keeps the suite off the rate limit.
 
 ```bash
-npm test        # 227 passed, 5 skipped
+npm test        # 338 passed, 8 skipped
 ```
 
 The 5 skips are viewport-driven responsive tests, scoped to the desktop project so they
@@ -134,8 +161,8 @@ run once. Full RED/GREEN evidence and all 82 behavioural guarantees:
 
 ## With more time
 
-- **Coin detail page with a price chart** — needs a router and a chart library. Biggest gap.
 - **Page number in the URL** — paging is component state, so a page can't be linked.
+- **Compare two coins on one chart**, and candlesticks via `/ohlc`.
 - **A labelled "reorder these results" control** — gives price/24h change back honestly,
   scoped to the loaded set rather than pretending to be market-wide.
 - **Migrate off CRA.**
