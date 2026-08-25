@@ -6,7 +6,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { mockCoins } from './helpers/mockApi';
-import { EXPECTED_COIN_COUNT } from './fixtures/coins';
+import { coinsFixture, EXPECTED_COIN_COUNT } from './fixtures/coins';
 import { card, cards, expectCardCount, textColor } from './helpers/dom';
 
 test.beforeEach(async ({ page }) => {
@@ -81,4 +81,51 @@ test('never leaks NaN, undefined or null into the rendered page', async ({ page 
   expect(text).not.toMatch(/\bnan\b/);
   expect(text).not.toMatch(/\bundefined\b/);
   expect(text).not.toMatch(/\bnull\b/);
+});
+
+test.describe('changes that round to zero', () => {
+  /**
+   * The live API returns values like -0.0004% for stablecoins. Deriving the
+   * trend from the raw number renders a red "-0.00%", which reads as a loss
+   * that did not happen. Trend must follow the number the user actually sees.
+   */
+  const dust = (percent: number) => [
+    { ...coinsFixture[0], id: 'dust-coin', name: 'Dust Coin', symbol: 'dust', price_change_percentage_24h: percent },
+  ];
+
+  test('renders an unsigned zero for a tiny negative change', async ({ page }) => {
+    await mockCoins(page, dust(-0.0004));
+    await page.goto('/');
+
+    const change = card(page, 'dust-coin').getByTestId('coin-change');
+    await expect(change).toHaveText('0.00%');
+    await expect(change).toHaveAttribute('data-trend', 'flat');
+  });
+
+  test('renders an unsigned zero for a tiny positive change', async ({ page }) => {
+    await mockCoins(page, dust(0.0004));
+    await page.goto('/');
+
+    const change = card(page, 'dust-coin').getByTestId('coin-change');
+    await expect(change).toHaveText('0.00%');
+    await expect(change).toHaveAttribute('data-trend', 'flat');
+  });
+
+  test('renders an unsigned zero for an exactly zero change', async ({ page }) => {
+    await mockCoins(page, dust(0));
+    await page.goto('/');
+
+    const change = card(page, 'dust-coin').getByTestId('coin-change');
+    await expect(change).toHaveText('0.00%');
+    await expect(change).toHaveAttribute('data-trend', 'flat');
+  });
+
+  test('still signs a change that survives rounding', async ({ page }) => {
+    await mockCoins(page, dust(-0.006));
+    await page.goto('/');
+
+    const change = card(page, 'dust-coin').getByTestId('coin-change');
+    await expect(change).toHaveText('-0.01%');
+    await expect(change).toHaveAttribute('data-trend', 'down');
+  });
 });

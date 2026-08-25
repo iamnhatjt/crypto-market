@@ -24,24 +24,52 @@ export function formatPrice(price: number | null | undefined): string {
   return priceFormatter.format(price);
 }
 
-/** Always signed, always two decimals: "+2.50%", "-1.20%", or "—" when unknown. */
-export function formatPercent(percent: number | null | undefined): string {
+/** Two decimals, so this is the precision the user actually sees. */
+const PERCENT_DECIMALS = 2;
+
+/**
+ * Round to display precision.
+ *
+ * Everything downstream keys off this rather than the raw value, so a
+ * stablecoin reported as -0.0004% is not rendered as a red "-0.00%" loss that
+ * never happened.
+ */
+function roundedPercent(percent: number | null | undefined): number | null {
   if (percent === null || percent === undefined || !Number.isFinite(percent)) {
+    return null;
+  }
+
+  const factor = 10 ** PERCENT_DECIMALS;
+
+  return Math.round(percent * factor) / factor;
+}
+
+/** Signed when it moved: "+2.50%", "-1.20%"; bare "0.00%" when it did not. */
+export function formatPercent(percent: number | null | undefined): string {
+  const rounded = roundedPercent(percent);
+
+  if (rounded === null) {
     return PLACEHOLDER;
   }
 
-  const sign = percent < 0 ? '-' : '+';
+  if (rounded === 0) {
+    return `${(0).toFixed(PERCENT_DECIMALS)}%`;
+  }
 
-  return `${sign}${Math.abs(percent).toFixed(2)}%`;
+  const sign = rounded < 0 ? '-' : '+';
+
+  return `${sign}${Math.abs(rounded).toFixed(PERCENT_DECIMALS)}%`;
 }
 
-/** A missing or zero change is "flat" — neither green nor red. */
+/** A missing change, or one too small to show at display precision, is "flat". */
 export function trendOf(percent: number | null | undefined): Trend {
-  if (percent === null || percent === undefined || !Number.isFinite(percent) || percent === 0) {
+  const rounded = roundedPercent(percent);
+
+  if (rounded === null || rounded === 0) {
     return 'flat';
   }
 
-  return percent > 0 ? 'up' : 'down';
+  return rounded > 0 ? 'up' : 'down';
 }
 
 export function formatCompactUsd(value: number | null | undefined): string {

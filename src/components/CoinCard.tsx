@@ -31,7 +31,9 @@ function CoinCard({ coin }: CoinCardProps) {
           width={32}
           height={32}
           loading="lazy"
-          className="h-8 w-8 shrink-0 rounded-full"
+          // Neutral backdrop so white-on-transparent logos (XRP, WhiteBIT) stay
+          // visible in both themes.
+          className="h-8 w-8 shrink-0 rounded-full bg-slate-100 ring-1 ring-slate-200 dark:bg-slate-600 dark:ring-slate-500"
         />
 
         <div className="min-w-0">
