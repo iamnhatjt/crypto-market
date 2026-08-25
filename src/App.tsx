@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import CoinGrid from './components/CoinGrid';
 import Pagination from './components/Pagination';
+import PageSizeSelect from './components/PageSizeSelect';
 import SearchBar from './components/SearchBar';
 import SortControls from './components/SortControls';
 import ThemeToggle from './components/ThemeToggle';
@@ -24,7 +25,13 @@ function App() {
    * alone otherwise — switching to a client-side field should not refetch.
    */
   const [apiOrder, setApiOrder] = useState<MarketsOrder>(DEFAULT_ORDER);
-  const { coins, loading, error, hasNextPage, retry, refresh } = useCoins(page, apiOrder);
+  /** How many coins to request per page. Part of the request, not a local slice. */
+  const [pageSize, setPageSize] = useState(config.perPage);
+  const { coins, loading, error, hasNextPage, retry, refresh } = useCoins(
+    page,
+    apiOrder,
+    pageSize
+  );
 
   const [query, setQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('market_cap');
@@ -97,6 +104,20 @@ function App() {
     [applyApiOrder, sortDirection]
   );
 
+  /** A different page size means page N points at different coins. */
+  const handlePageSizeChange = useCallback(
+    (size: number) => {
+      if (size === pageSize) {
+        return;
+      }
+
+      setPageSize(size);
+      setPage(FIRST_PAGE);
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    },
+    [pageSize]
+  );
+
   const handleSortDirectionChange = useCallback(
     (direction: SortDirection) => {
       setSortDirection(direction);
@@ -119,7 +140,7 @@ function App() {
               </h1>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {page === FIRST_PAGE
-                  ? `Top ${config.perPage} cryptocurrencies by market capitalisation, priced in USD.`
+                  ? `Top ${pageSize} cryptocurrencies by market capitalisation, priced in USD.`
                   : 'Cryptocurrencies by market capitalisation, priced in USD.'}
               </p>
             </div>
@@ -154,6 +175,11 @@ function App() {
               scope={sortScope}
               onFieldChange={handleSortFieldChange}
               onDirectionChange={handleSortDirectionChange}
+              disabled={controlsDisabled}
+            />
+            <PageSizeSelect
+              value={pageSize}
+              onChange={handlePageSizeChange}
               disabled={controlsDisabled}
             />
           </div>

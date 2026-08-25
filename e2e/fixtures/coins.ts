@@ -20,7 +20,11 @@ export interface MarketCoinFixture {
   image: string;
   current_price: number;
   market_cap: number;
-  market_cap_rank: number;
+  /**
+   * Nullable in the live API. Verified: `order=market_cap_asc` returns coins
+   * such as namecoin with `market_cap_rank: null` and `market_cap: 0`.
+   */
+  market_cap_rank: number | null;
   price_change_percentage_24h: number | null;
 }
 
@@ -160,6 +164,41 @@ export function makeCoins(startRank: number, count: number): MarketCoinFixture[]
       market_cap: 1_000_000_000_000 - rank * 1_000_000,
       market_cap_rank: rank,
       price_change_percentage_24h: rank % 3 === 0 ? null : Number(((rank % 7) - 3).toFixed(2)),
+    };
+  });
+}
+
+/**
+ * Coins as the live API returns them at the bottom of the market: no rank and a
+ * zero market cap. Reproduces what `order=market_cap_asc` actually serves.
+ */
+export function makeUnrankedCoins(count: number): MarketCoinFixture[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `unranked-${index + 1}`,
+    symbol: `u${index + 1}`,
+    name: `Unranked ${index + 1}`,
+    image: icon('94a3b8'),
+    current_price: Number((0.01 * (index + 1)).toFixed(4)),
+    market_cap: 0,
+    market_cap_rank: null,
+    price_change_percentage_24h: index % 2 === 0 ? 1.5 : -1.5,
+  }));
+}
+
+/** Half ranked, half not — the realistic boundary case at the edge of the market. */
+export function makeMixedRankCoins(count: number): MarketCoinFixture[] {
+  return Array.from({ length: count }, (_, index) => {
+    const ranked = index < Math.floor(count / 2);
+
+    return {
+      id: `mixed-${index + 1}`,
+      symbol: `m${index + 1}`,
+      name: `Mixed ${index + 1}`,
+      image: icon('94a3b8'),
+      current_price: 1 + index,
+      market_cap: ranked ? 1_000_000 * (count - index) : 0,
+      market_cap_rank: ranked ? 900 + index : null,
+      price_change_percentage_24h: 0.5,
     };
   });
 }

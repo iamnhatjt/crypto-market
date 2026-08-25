@@ -22,7 +22,11 @@ interface UseCoinsResult {
   refresh: () => void;
 }
 
-export function useCoins(page: number, order: MarketsOrder = DEFAULT_ORDER): UseCoinsResult {
+export function useCoins(
+  page: number,
+  order: MarketsOrder = DEFAULT_ORDER,
+  perPage: number = config.perPage
+): UseCoinsResult {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,12 +46,13 @@ export function useCoins(page: number, order: MarketsOrder = DEFAULT_ORDER): Use
     async (
       targetPage: number,
       targetOrder: MarketsOrder,
+      targetPerPage: number,
       options?: { force?: boolean; reset?: boolean }
     ) => {
       const force = options?.force ?? false;
       const reset = options?.reset ?? false;
 
-      const cacheKey = coinsCacheKey(targetPage, targetOrder);
+      const cacheKey = coinsCacheKey(targetPage, targetOrder, targetPerPage);
 
       if (force) {
         clearCache(cacheKey);
@@ -56,7 +61,7 @@ export function useCoins(page: number, order: MarketsOrder = DEFAULT_ORDER): Use
 
         if (cached) {
           setCoins(cached);
-          setHasNextPage(cached.length >= config.perPage);
+          setHasNextPage(cached.length >= targetPerPage);
           setError(null);
           setLoading(false);
           return;
@@ -73,7 +78,7 @@ export function useCoins(page: number, order: MarketsOrder = DEFAULT_ORDER): Use
       setError(null);
 
       try {
-        const data = await fetchCoins(targetPage, targetOrder);
+        const data = await fetchCoins(targetPage, targetOrder, targetPerPage);
 
         if (!mounted.current) {
           return;
@@ -81,7 +86,7 @@ export function useCoins(page: number, order: MarketsOrder = DEFAULT_ORDER): Use
 
         writeCache(cacheKey, data);
         setCoins(data);
-        setHasNextPage(data.length >= config.perPage);
+        setHasNextPage(data.length >= targetPerPage);
         setError(null);
       } catch (caught) {
         if (!mounted.current) {
@@ -102,16 +107,16 @@ export function useCoins(page: number, order: MarketsOrder = DEFAULT_ORDER): Use
 
   useEffect(() => {
     mounted.current = true;
-    void load(page, order, { reset: true });
-  }, [page, order, load]);
+    void load(page, order, perPage, { reset: true });
+  }, [page, order, perPage, load]);
 
   const retry = useCallback(() => {
-    void load(page, order);
-  }, [load, page, order]);
+    void load(page, order, perPage);
+  }, [load, page, order, perPage]);
 
   const refresh = useCallback(() => {
-    void load(page, order, { force: true });
-  }, [load, page, order]);
+    void load(page, order, perPage, { force: true });
+  }, [load, page, order, perPage]);
 
   return { coins, loading, error, hasNextPage, retry, refresh };
 }

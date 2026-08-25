@@ -8,9 +8,12 @@ export const FIRST_PAGE = 1;
 
 export const DEFAULT_ORDER: MarketsOrder = 'market_cap_desc';
 
-/** Each page and ordering caches independently, so going back is free. */
-export function coinsCacheKey(page: number, order: MarketsOrder): string {
-  return `crypto-dashboard:coins:markets:usd:${order}:page-${page}`;
+/**
+ * Each combination of ordering, page size and page number caches independently,
+ * so revisiting any of them is free.
+ */
+export function coinsCacheKey(page: number, order: MarketsOrder, perPage: number): string {
+  return `crypto-dashboard:coins:markets:usd:${order}:per-${perPage}:page-${page}`;
 }
 
 /** Wire format -> domain model. Keeps snake_case out of the components. */
@@ -40,9 +43,10 @@ const inFlight = new Map<string, Promise<Coin[]>>();
 
 export async function fetchCoins(
   page: number = FIRST_PAGE,
-  order: MarketsOrder = DEFAULT_ORDER
+  order: MarketsOrder = DEFAULT_ORDER,
+  perPage: number = config.perPage
 ): Promise<Coin[]> {
-  const key = `${order}:${page}`;
+  const key = `${order}:${perPage}:${page}`;
   const pending = inFlight.get(key);
 
   if (pending) {
@@ -54,7 +58,7 @@ export async function fetchCoins(
       params: {
         vs_currency: 'usd',
         order,
-        per_page: config.perPage,
+        per_page: perPage,
         page,
         sparkline: false,
       },
