@@ -9,9 +9,25 @@
       name="description"
       content="Live cryptocurrency market dashboard showing the top 20 coins by market cap."
     />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Crypto Market Dashboard</title>
+    <script>
+      // Apply the stored theme before first paint so dark mode does not flash white.
+      (function () {
+        try {
+          var stored = window.localStorage.getItem('crypto-dashboard:theme');
+          var prefersDark =
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (stored === 'dark' || (stored === null && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (error) {
+          /* Storage blocked — fall back to the light theme. */
+        }
+      })();
+    </script>
   </head>
-  <body class="h-full">
+  <body class="h-full bg-slate-50 dark:bg-slate-900">
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
   </body>

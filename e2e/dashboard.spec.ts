@@ -77,7 +77,8 @@ test('never leaks NaN, undefined or null into the rendered page', async ({ page 
 
   const text = (await page.locator('main').innerText()).toLowerCase();
 
-  expect(text).not.toContain('nan');
-  expect(text).not.toContain('undefined');
-  expect(text).not.toContain('null');
+  // Word-bounded: "Binance Coin" legitimately contains the substring "nan".
+  expect(text).not.toMatch(/\bnan\b/);
+  expect(text).not.toMatch(/\bundefined\b/);
+  expect(text).not.toMatch(/\bnull\b/);
 });
