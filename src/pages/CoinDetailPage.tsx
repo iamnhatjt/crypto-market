@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import ChartRangeSelect from '../components/ChartRangeSelect';
+import PriceChart from '../components/PriceChart';
 import StatGrid, { Stat } from '../components/StatGrid';
 import ThemeToggle from '../components/ThemeToggle';
 import { useThemeControl } from '../components/ThemeProvider';
 import DetailSkeleton from '../components/states/DetailSkeleton';
 import ErrorState from '../components/states/ErrorState';
+import { DEFAULT_RANGE } from '../api/coinChart';
+import { useCoinChart } from '../hooks/useCoinChart';
 import { useCoinDetail } from '../hooks/useCoinDetail';
 import {
   formatCompactUsd,
@@ -14,7 +18,7 @@ import {
   formatSupply,
   trendOf,
 } from '../lib/format';
-import { CoinDetail } from '../types/coin';
+import { ChartRange, CoinDetail } from '../types/coin';
 
 const TREND_STYLES: Record<string, string> = {
   up: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10',
@@ -54,6 +58,13 @@ function CoinDetailPage() {
   const { coinId = '' } = useParams<{ coinId: string }>();
   const { theme, toggleTheme } = useThemeControl();
   const { detail, loading, error, retry } = useCoinDetail(coinId);
+
+  /**
+   * The chart is a separate request from the stats, so a chart failure leaves
+   * the figures on screen and changing range does not refetch the description.
+   */
+  const [range, setRange] = useState<ChartRange>(DEFAULT_RANGE);
+  const chart = useCoinChart(coinId, range);
 
   const trend = detail ? trendOf(detail.priceChange24h) : 'flat';
 
@@ -135,6 +146,48 @@ function CoinDetailPage() {
                     </span>
                   </div>
                 </div>
+              </section>
+
+              <section className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">Price history</h2>
+                  <ChartRangeSelect
+                    value={range}
+                    onChange={setRange}
+                    disabled={chart.loading && chart.points.length === 0}
+                  />
+                </div>
+
+                {chart.error !== null && (
+                  <div
+                    data-testid="chart-error"
+                    role="alert"
+                    className="flex flex-col items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm dark:border-rose-500/30 dark:bg-rose-500/10"
+                  >
+                    <p className="text-rose-800 dark:text-rose-300">{chart.error}</p>
+                    <button
+                      type="button"
+                      data-testid="chart-retry"
+                      onClick={chart.retry}
+                      className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                    >
+                      Retry chart
+                    </button>
+                  </div>
+                )}
+
+                {chart.error === null && chart.loading && chart.points.length === 0 && (
+                  <div
+                    data-testid="chart-skeleton"
+                    aria-busy="true"
+                    aria-label="Loading price history"
+                    className="h-64 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+                  />
+                )}
+
+                {chart.error === null && !(chart.loading && chart.points.length === 0) && (
+                  <PriceChart points={chart.points} range={range} />
+                )}
               </section>
 
               <StatGrid stats={buildStats(detail)} />

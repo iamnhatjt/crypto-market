@@ -45,6 +45,27 @@ test.describe('rendering', () => {
     await expect(page.getByTestId('chart-min')).toContainText('$12.50');
   });
 
+  test('rounds a full-precision price to cents', async ({ page }) => {
+    // Chart series carry unrounded floats, unlike /coins/markets. Eight decimal
+    // places is right for a sub-cent coin and absurd for a four-figure price.
+    await mockCoinChart(page, {
+      series: makeSeries(20, { startPrice: 2000, drift: 1, spikes: { 15: 2524.34151352 } }),
+    });
+    await open(page);
+
+    // Exact text, not substring: "$2,524.34" is a prefix of "$2,524.34151352".
+    await expect(page.getByTestId('chart-max')).toHaveText('High $2,524.34');
+  });
+
+  test('still keeps precision on a sub-cent series', async ({ page }) => {
+    await mockCoinChart(page, {
+      series: makeSeries(20, { startPrice: 0.00001, drift: 0, spikes: { 5: 0.00002341 } }),
+    });
+    await open(page);
+
+    await expect(page.getByTestId('chart-max')).toHaveText('High $0.00002341');
+  });
+
   test('draws the line green when the range closed higher', async ({ page }) => {
     await mockCoinChart(page, { series: makeSeries(60, { startPrice: 100, drift: 2 }) });
     await open(page);
@@ -105,15 +126,17 @@ test.describe('ranges', () => {
   });
 
   test('renders the series for the newly chosen range', async ({ page }) => {
+    // Both series stay under the downsampling limit, so this test is about the
+    // range switch alone; downsampling has its own test below.
     await mockCoinChart(page, {
-      byDays: { '7': makeSeries(169), '30': makeSeries(721) },
+      byDays: { '7': makeSeries(169), '30': makeSeries(400) },
     });
     await open(page);
     await expect(page.getByTestId('price-chart')).toHaveAttribute('data-point-count', '169');
 
     await page.getByTestId('chart-range-30').click();
 
-    await expect(page.getByTestId('price-chart')).toHaveAttribute('data-point-count', '721');
+    await expect(page.getByTestId('price-chart')).toHaveAttribute('data-point-count', '400');
   });
 
   test('caches each range, so going back costs no request', async ({ page }) => {
@@ -146,6 +169,10 @@ test.describe('ranges', () => {
 });
 
 test.describe('hovering', () => {
+  // A mouse hover cannot be produced on a touch-only device; the equivalent
+  // touch interaction is covered by its own test below.
+  test.skip(({ isMobile }) => Boolean(isMobile), 'pointer hover; touch covered separately');
+
   test('shows the price at the hovered point', async ({ page }) => {
     await mockCoinChart(page, { series: makeSeries(100, { startPrice: 100, drift: 1 }) });
     await open(page);
@@ -254,5 +281,27 @@ test.describe('failure', () => {
     await expect(page.getByTestId('chart-skeleton')).toBeVisible();
     await expect(page.getByTestId('price-chart')).toBeVisible();
     await expect(page.getByTestId('chart-skeleton')).toBeHidden();
+  });
+});
+
+test.describe('touch', () => {
+  test.skip(({ isMobile }) => !isMobile, 'touch interaction; runs on the mobile project only');
+
+  test('tapping the chart reveals the price at that point', async ({ page }) => {
+    await mockCoinChart(page, { series: makeSeries(100, { startPrice: 100, drift: 1 }) });
+    await open(page);
+    const chart = page.getByTestId('price-chart');
+    await expect(chart).toBeVisible();
+
+    const box = await chart.boundingBox();
+    if (box === null) throw new Error('chart has no bounding box');
+
+    await page.touchscreen.tap(box.x + box.width - 2, box.y + box.height / 2);
+
+    await expect(page.getByTestId('chart-tooltip')).toBeVisible();
+    // The series runs $100 to $199. Which of the last points a tap two pixels
+    // from the edge maps to depends on the device width, so this asserts the
+    // tap read a point near where it landed rather than pinning one index.
+    await expect(page.getByTestId('chart-tooltip')).toHaveText(/\$19[5-9]\.00/);
   });
 });

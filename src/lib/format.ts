@@ -1,13 +1,23 @@
 import { Trend } from '../types/coin';
 
 /**
- * One formatter handles the full crypto price range.
+ * Prices at or above a dollar: cents are the last digit anyone reads.
  *
- * `minimumFractionDigits: 2` keeps dollar amounts looking like money
- * ($64,000.00), while `maximumFractionDigits: 8` stops sub-cent coins from
- * collapsing to $0.00 — SHIB renders as $0.00002341 rather than $0.00.
+ * /coins/markets returns pre-rounded prices, but chart series carry unrounded
+ * floats — without this, a $2,524.34151352 high reached the screen.
  */
-const priceFormatter = new Intl.NumberFormat('en-US', {
+const dollarFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * Prices below a dollar, where cents alone would collapse the value: SHIB has
+ * to render as $0.00002341, not $0.00.
+ */
+const subDollarFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   minimumFractionDigits: 2,
@@ -21,7 +31,9 @@ export function formatPrice(price: number | null | undefined): string {
     return PLACEHOLDER;
   }
 
-  return priceFormatter.format(price);
+  // Precision follows magnitude: eight decimals is right for a fraction of a
+  // cent and meaningless on a four-figure price.
+  return Math.abs(price) >= 1 ? dollarFormatter.format(price) : subDollarFormatter.format(price);
 }
 
 /** Two decimals, so this is the precision the user actually sees. */

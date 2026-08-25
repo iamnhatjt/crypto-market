@@ -117,3 +117,22 @@ export interface CoinDetail {
   totalSupply: number | null;
   maxSupply: number | null;
 }
+
+/** Wire shape of `/coins/{id}/market_chart`. */
+export interface MarketChartResponse {
+  prices?: Array<[number, number]>;
+}
+
+/** One plotted point: epoch milliseconds and a USD price. */
+export interface PricePoint {
+  time: number;
+  price: number;
+}
+
+/**
+ * Chart ranges, in days.
+ *
+ * `max` is deliberately absent: the free tier rejects it with error 10012,
+ * limiting history to 365 days.
+ */
+export type ChartRange = 1 | 7 | 30 | 90 | 365;

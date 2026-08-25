@@ -13,9 +13,9 @@ export interface MarketChartFixture {
 }
 
 /** A fixed epoch so every generated series is byte-identical between runs. */
-export const SERIES_START_MS = 1_700_000_000_000;
+const SERIES_START_MS = 1_700_000_000_000;
 
-export interface SeriesOptions {
+interface SeriesOptions {
   /** Milliseconds between points. Defaults to one hour. */
   stepMs?: number;
   startPrice?: number;
