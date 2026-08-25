@@ -10,9 +10,14 @@ import SkeletonGrid from './components/states/SkeletonGrid';
 import { DEFAULT_ORDER, FIRST_PAGE } from './api/coins';
 import { config } from './config/env';
 import { useCoins } from './hooks/useCoins';
+import { useCoinSearch } from './hooks/useCoinSearch';
+import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { useTheme } from './hooks/useTheme';
-import { filterCoins, sortCoins } from './lib/sort';
+import { sortCoins } from './lib/sort';
 import { MarketsOrder, SortDirection, SortField, SortScope } from './types/coin';
+
+/** Long enough to skip intermediate keystrokes, short enough to feel immediate. */
+const SEARCH_DEBOUNCE_MS = 400;
 
 function App() {
   const { theme, toggleTheme } = useTheme();
@@ -33,26 +38,50 @@ function App() {
   );
 
   const [query, setQuery] = useState('');
+  /**
+   * Search costs two network requests, so the query is debounced. Filtering a
+   * loaded list needed no debounce; issuing requests does.
+   */
+  const debouncedQuery = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
+  const search = useCoinSearch(debouncedQuery);
+
   const [sortField, setSortField] = useState<SortField>('market_cap');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  const sortScope: SortScope = sortField === 'market_cap' ? 'market' : 'page';
+  // Search replaces the browse listing rather than filtering it: results are one
+  // relevance-ranked set from the whole market, not a slice of a page.
+  const searchMode = search.active;
+  const activeCoins = searchMode ? search.results : coins;
+  const activeLoading = searchMode ? search.loading : loading;
+  const activeError = searchMode ? search.error : error;
+  const activeRetry = searchMode ? search.retry : retry;
 
-  // Filtering is always local. Sorting is only local for price and 24h change:
-  // market cap arrives already ordered by the API, and re-sorting it here would
-  // reshuffle one page using data the server ordered across the whole market.
+  const sortScope: SortScope = searchMode
+    ? 'results'
+    : sortField === 'market_cap'
+      ? 'market'
+      : 'page';
+
+  /*
+   * Market cap while browsing is the only ordering the API resolves, and it
+   * arrives already sorted across the whole market — re-sorting it here would
+   * reshuffle one page using a narrower view of the data. Everything else,
+   * including market cap over search results, is sorted locally.
+   */
   const visibleCoins = useMemo(() => {
-    const filtered = filterCoins(coins, query);
+    const serverSorted = !searchMode && sortField === 'market_cap';
 
-    return sortField === 'market_cap' ? filtered : sortCoins(filtered, sortField, sortDirection);
-  }, [coins, query, sortField, sortDirection]);
+    return serverSorted ? activeCoins : sortCoins(activeCoins, sortField, sortDirection);
+  }, [activeCoins, searchMode, sortField, sortDirection]);
 
   // Exactly one of these is true at a time; order encodes the priority.
-  const showError = error !== null;
-  const showSkeleton = !showError && loading && coins.length === 0;
+  const showError = activeError !== null;
+  const showSkeleton = !showError && activeLoading && activeCoins.length === 0;
   const showEmpty = !showError && !showSkeleton && visibleCoins.length === 0;
   const showGrid = !showError && !showSkeleton && visibleCoins.length > 0;
 
+  // The search box must stay usable even when the current view failed, so the
+  // user can type their way out of an error.
   const controlsDisabled = showSkeleton || showError;
 
   /**
@@ -61,14 +90,14 @@ function App() {
    * list so searching does not appear to change your position in the market.
    */
   const rankRange = useMemo(() => {
-    const ranks = coins
+    const ranks = activeCoins
       .map((coin) => coin.marketCapRank)
       .filter((rank): rank is number => typeof rank === 'number' && Number.isFinite(rank));
 
     return ranks.length === 0
       ? null
       : { first: Math.min(...ranks), last: Math.max(...ranks) };
-  }, [coins]);
+  }, [activeCoins]);
 
   const goToPage = useCallback((next: number) => {
     if (next < FIRST_PAGE) {
@@ -167,7 +196,7 @@ function App() {
             <SearchBar
               value={query}
               onChange={setQuery}
-              disabled={controlsDisabled}
+              searching={searchMode && activeLoading}
               resultCount={visibleCoins.length}
             />
             <SortControls
@@ -182,18 +211,28 @@ function App() {
         </header>
 
         <main>
-          {showError && <ErrorState message={error} onRetry={retry} retrying={loading} />}
+          {showError && (
+            <ErrorState message={activeError} onRetry={activeRetry} retrying={activeLoading} />
+          )}
           {showSkeleton && <SkeletonGrid />}
-          {showEmpty && <EmptyState query={query} page={page} onClear={() => setQuery('')} />}
+          {showEmpty && (
+            <EmptyState
+              query={debouncedQuery}
+              page={page}
+              context={searchMode ? 'search' : 'page'}
+              onClear={() => setQuery('')}
+            />
+          )}
           {showGrid && <CoinGrid coins={visibleCoins} />}
         </main>
 
-        {!showError && (
+        {/* Search results are one set, not a page of the market. */}
+        {!showError && !searchMode && (
           <Pagination
             page={page}
             hasNextPage={hasNextPage}
             rankRange={rankRange}
-            coinCount={coins.length}
+            coinCount={activeCoins.length}
             pageSize={pageSize}
             disabled={loading}
             onPageChange={goToPage}

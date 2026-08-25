@@ -81,13 +81,15 @@ test.describe('the two-step flow', () => {
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
 
-    await page.getByTestId('search-input').fill('cardano');
-    await expect(card(page, 'cardano')).toBeVisible();
+    // Tezos is deliberately NOT in the browse list, so its card can only come
+    // from the search flow — a page-1 coin would appear either way.
+    await page.getByTestId('search-input').fill('tezos');
 
-    expect(state.hydratedIds.at(-1)).toContain('cardano');
+    await expect.poll(() => state.hydratedIds.at(-1) ?? []).toContain('tezos');
+
     // The hydration call is what supplies the price /search omits.
-    await expect(card(page, 'cardano').getByTestId('coin-price')).toHaveText('$0.4512');
-    await expect(card(page, 'cardano').getByTestId('coin-change')).toHaveText('+5.00%');
+    await expect(card(page, 'tezos').getByTestId('coin-price')).toHaveText('$0.7823');
+    await expect(card(page, 'tezos').getByTestId('coin-change')).toHaveText('+0.90%');
   });
 
   test('finds coins that are not on the page being viewed', async ({ page }) => {
@@ -148,16 +150,19 @@ test.describe('races and caching', () => {
     await expectCardCount(page, EXPECTED_COIN_COUNT);
 
     const input = page.getByTestId('search-input');
-    await input.fill('cardano');
-    await expect(card(page, 'cardano')).toBeVisible();
+    await input.fill('tezos');
+    await expect.poll(() => state.searchQueries).toEqual(['tezos']);
+    await expect(card(page, 'tezos')).toBeVisible();
 
     await input.fill('');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
 
-    await input.fill('cardano');
-    await expect(card(page, 'cardano')).toBeVisible();
+    await input.fill('tezos');
+    await expect(card(page, 'tezos')).toBeVisible();
 
-    expect(state.searchQueries).toEqual(['cardano']);
+    // Wait past the debounce window so a second request would have landed.
+    await page.waitForTimeout(800);
+    expect(state.searchQueries).toEqual(['tezos']);
   });
 });
 

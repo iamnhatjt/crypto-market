@@ -1,21 +1,75 @@
 /**
  * Journey 9
- * As a crypto watcher, I want sorting by market cap to reorder the whole
- * market rather than just the rows on screen, so that "lowest market cap"
- * means the actual bottom of the market.
+ * As a crypto watcher, I want every sort option to reorder the whole market via
+ * the API, so that "lowest volume" means the actual lowest in the market and not
+ * merely the lowest of the twenty rows in front of me.
  *
- * CoinGecko's /coins/markets `order` param supports market_cap_asc|desc,
- * volume_*, and id_* — but NOT price or 24h change. Worse, it answers 200 with
- * plain market-cap ordering for unsupported values instead of erroring. So
- * market cap is sent to the API, price and 24h change are sorted client-side
- * over the loaded page, and the UI states which is which.
+ * Which fields exist is dictated by what CoinGecko can actually order by.
+ * Verified against the live API: `market_cap_asc|desc` and `volume_asc|desc` are
+ * honoured, while `price_*` and `percent_change_24h_*` return 200 with plain
+ * market-cap ordering — silently ignored. Rather than ship two sorts that only
+ * look like they work, price and 24h change are not offered at all.
+ *
+ * Because every sort is server-side, there is no page-scoped sorting left and
+ * therefore no scope caveat to display.
  */
 import { test, expect } from '@playwright/test';
-import { mockCoinsOrdered } from './helpers/mockApi';
+import { mockCoinsOrdered, mockSearchFlow, MARKETS_ROUTE } from './helpers/mockApi';
 import { EXPECTED_COIN_COUNT } from './fixtures/coins';
 import { card, expectCardCount, visibleCoinIds } from './helpers/dom';
 
-test.describe('market cap sorting goes to the API', () => {
+test.describe('the offered fields match what the API supports', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockCoinsOrdered(page);
+    await page.goto('/');
+    await expectCardCount(page, EXPECTED_COIN_COUNT);
+  });
+
+  test('offers exactly market cap and volume', async ({ page }) => {
+    const values = await page
+      .getByTestId('sort-field')
+      .locator('option')
+      .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));
+
+    expect(values).toEqual(['market_cap', 'volume']);
+  });
+
+  test('does not offer sorts CoinGecko silently ignores', async ({ page }) => {
+    const values = await page
+      .getByTestId('sort-field')
+      .locator('option')
+      .evaluateAll((options) => options.map((o) => (o as HTMLOptionElement).value));
+
+    expect(values).not.toContain('price');
+    expect(values).not.toContain('change');
+  });
+
+  test('shows no sort-scope caveat, because every sort is market-wide', async ({ page }) => {
+    await expect(page.getByTestId('sort-scope')).toHaveCount(0);
+  });
+});
+
+test.describe('every field and direction reaches the API', () => {
+  const cases = [
+    { field: 'market_cap', direction: 'desc', order: 'market_cap_desc' },
+    { field: 'market_cap', direction: 'asc', order: 'market_cap_asc' },
+    { field: 'volume', direction: 'desc', order: 'volume_desc' },
+    { field: 'volume', direction: 'asc', order: 'volume_asc' },
+  ] as const;
+
+  for (const { field, direction, order } of cases) {
+    test(`${field} ${direction} sends order=${order}`, async ({ page }) => {
+      const state = await mockCoinsOrdered(page);
+      await page.goto('/');
+      await expectCardCount(page, EXPECTED_COIN_COUNT);
+
+      await page.getByTestId('sort-field').selectOption(field);
+      await page.getByTestId(`sort-direction-${direction}`).click();
+
+      await expect.poll(() => state.requests.map((r) => r.order)).toContain(order);
+    });
+  }
+
   test('sends order=market_cap_desc on first load', async ({ page }) => {
     const state = await mockCoinsOrdered(page);
     await page.goto('/');
@@ -24,31 +78,38 @@ test.describe('market cap sorting goes to the API', () => {
     expect(state.requests[0]).toEqual({ page: 1, order: 'market_cap_desc' });
   });
 
-  test('sends order=market_cap_asc when switching to low-to-high', async ({ page }) => {
+  test('only ever sends an order the API honours', async ({ page }) => {
     const state = await mockCoinsOrdered(page);
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
 
-    await page.getByTestId('sort-field').selectOption('market_cap');
-    await page.getByTestId('sort-direction-asc').click();
+    for (const field of ['volume', 'market_cap'] as const) {
+      await page.getByTestId('sort-field').selectOption(field);
+      await page.getByTestId('sort-direction-asc').click();
+      await page.getByTestId('sort-direction-desc').click();
+    }
 
-    await expect.poll(() => state.requests.map((r) => r.order)).toContain('market_cap_asc');
+    const allowed = ['market_cap_asc', 'market_cap_desc', 'volume_asc', 'volume_desc'];
+    await expect
+      .poll(() => state.requests.every((r) => allowed.includes(r.order)))
+      .toBe(true);
   });
+});
 
+test.describe('ordering behaviour', () => {
   test('renders the order the API returned instead of re-sorting locally', async ({ page }) => {
     await mockCoinsOrdered(page);
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
 
-    await page.getByTestId('sort-field').selectOption('market_cap');
     await page.getByTestId('sort-direction-asc').click();
 
     // The ascending payload leads with cardano (rank 8) ahead of bitcoin
-    // (rank 1). A local market-cap sort would not produce that order.
+    // (rank 1). Any local re-sort would move it.
     await expect.poll(async () => (await visibleCoinIds(page))[0]).toBe('cardano');
   });
 
-  test('goes back to page 1 when the market-cap order changes', async ({ page }) => {
+  test('returns to page 1 when the order changes', async ({ page }) => {
     await mockCoinsOrdered(page);
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
@@ -56,10 +117,8 @@ test.describe('market cap sorting goes to the API', () => {
     await page.getByTestId('next-page').click();
     await expect(page.getByTestId('page-indicator')).toContainText('2');
 
-    await page.getByTestId('sort-field').selectOption('market_cap');
-    await page.getByTestId('sort-direction-asc').click();
+    await page.getByTestId('sort-field').selectOption('volume');
 
-    // A new global ordering makes "page 2" meaningless, so start over.
     await expect(page.getByTestId('page-indicator')).toContainText('1');
   });
 
@@ -68,7 +127,6 @@ test.describe('market cap sorting goes to the API', () => {
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
 
-    await page.getByTestId('sort-field').selectOption('market_cap');
     await page.getByTestId('sort-direction-asc').click();
     await expect.poll(async () => (await visibleCoinIds(page))[0]).toBe('cardano');
 
@@ -78,94 +136,76 @@ test.describe('market cap sorting goes to the API', () => {
     await page.getByTestId('sort-direction-asc').click();
     await expect.poll(async () => (await visibleCoinIds(page))[0]).toBe('cardano');
 
-    // desc, asc, desc-from-cache, asc-from-cache -> only two network requests.
     expect(state.requests.map((r) => r.order)).toEqual(['market_cap_desc', 'market_cap_asc']);
   });
 });
 
-test.describe('price and 24h change stay client-side', () => {
-  test('does not hit the API when switching to price', async ({ page }) => {
-    const state = await mockCoinsOrdered(page);
+test.describe('search results are ordered by the API too', () => {
+  test('passes the chosen order to the hydration call', async ({ page }) => {
+    const state = await mockSearchFlow(page);
     await page.goto('/');
     await expectCardCount(page, EXPECTED_COIN_COUNT);
-    const before = state.requests.length;
 
-    await page.getByTestId('sort-field').selectOption('price');
+    await page.getByTestId('sort-field').selectOption('volume');
     await page.getByTestId('sort-direction-asc').click();
-    await expect(card(page, 'shiba-inu')).toBeVisible();
 
-    expect(state.requests.length).toBe(before);
-  });
+    await page.getByTestId('search-input').fill('bitcoin');
+    await expectCardCount(page, 2);
 
-  test('does not hit the API when switching to 24h change', async ({ page }) => {
-    const state = await mockCoinsOrdered(page);
-    await page.goto('/');
-    await expectCardCount(page, EXPECTED_COIN_COUNT);
-    const before = state.requests.length;
-
-    await page.getByTestId('sort-field').selectOption('change');
-    await page.getByTestId('sort-direction-desc').click();
-
-    const ids = await visibleCoinIds(page);
-    expect(ids[0]).toBe('avalanche-2');
-    expect(state.requests.length).toBe(before);
-  });
-
-  test('never sends an order value the API silently ignores', async ({ page }) => {
-    const state = await mockCoinsOrdered(page);
-    await page.goto('/');
-    await expectCardCount(page, EXPECTED_COIN_COUNT);
-
-    await page.getByTestId('sort-field').selectOption('price');
-    await page.getByTestId('sort-direction-asc').click();
-    await page.getByTestId('sort-field').selectOption('change');
-    await page.getByTestId('sort-direction-desc').click();
-    await page.getByTestId('next-page').click();
-    await expect(page.getByTestId('page-indicator')).toContainText('2');
-
-    const orders = state.requests.map((r) => r.order);
-    expect(orders.every((o) => o === 'market_cap_desc' || o === 'market_cap_asc')).toBe(true);
-  });
-
-  test('keeps the fetched pool when switching from market cap to price', async ({ page }) => {
-    const state = await mockCoinsOrdered(page);
-    await page.goto('/');
-    await expectCardCount(page, EXPECTED_COIN_COUNT);
-
-    await page.getByTestId('sort-field').selectOption('market_cap');
-    await page.getByTestId('sort-direction-asc').click();
-    await expect.poll(async () => (await visibleCoinIds(page))[0]).toBe('cardano');
-    const after = state.requests.length;
-
-    await page.getByTestId('sort-field').selectOption('price');
-
-    // Switching to a client-side field must not silently refetch.
-    expect(state.requests.length).toBe(after);
+    expect(state.hydrationOrders.at(-1)).toBe('volume_asc');
   });
 });
 
-test.describe('the UI says which scope applies', () => {
-  test.beforeEach(async ({ page }) => {
-    await mockCoinsOrdered(page);
+test.describe('volume is visible, since it can be sorted by', () => {
+  test('shows 24h volume on the card', async ({ page }) => {
+    await page.route(MARKETS_ROUTE, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'bitcoin',
+            symbol: 'btc',
+            name: 'Bitcoin',
+            image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg"/>',
+            current_price: 64000,
+            market_cap: 1_260_000_000_000,
+            market_cap_rank: 1,
+            total_volume: 45_600_000_000,
+            price_change_percentage_24h: 2.5,
+          },
+        ]),
+      })
+    );
     await page.goto('/');
-    await expectCardCount(page, EXPECTED_COIN_COUNT);
+    await expectCardCount(page, 1);
+
+    await expect(card(page, 'bitcoin').getByTestId('coin-volume')).toContainText('$45.6B');
   });
 
-  test('states that market cap spans the whole market', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('market_cap');
+  test('renders a placeholder when volume is missing', async ({ page }) => {
+    await page.route(MARKETS_ROUTE, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'bitcoin',
+            symbol: 'btc',
+            name: 'Bitcoin',
+            image: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg"/>',
+            current_price: 64000,
+            market_cap: 1_260_000_000_000,
+            market_cap_rank: 1,
+            total_volume: null,
+            price_change_percentage_24h: 2.5,
+          },
+        ]),
+      })
+    );
+    await page.goto('/');
+    await expectCardCount(page, 1);
 
-    await expect(page.getByTestId('sort-scope')).toContainText('whole market');
-  });
-
-  test('states that price is limited to the current page', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('price');
-
-    await expect(page.getByTestId('sort-scope')).toContainText('this page');
-  });
-
-  test('states that 24h change is limited to the current page', async ({ page }) => {
-    await page.getByTestId('sort-field').selectOption('change');
-
-    await expect(page.getByTestId('sort-scope')).toContainText('this page');
+    await expect(card(page, 'bitcoin').getByTestId('coin-volume')).toContainText('—');
   });
 });

@@ -17,7 +17,7 @@ export function coinsCacheKey(page: number, order: MarketsOrder, perPage: number
 }
 
 /** Wire format -> domain model. Keeps snake_case out of the components. */
-function toCoin(raw: CoinMarketResponse): Coin {
+export function toCoin(raw: CoinMarketResponse): Coin {
   return {
     id: raw.id,
     symbol: raw.symbol,

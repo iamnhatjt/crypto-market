@@ -21,6 +21,12 @@ const FIELD_OPTIONS: Array<{ value: SortField; label: string }> = [
   { value: 'change', label: '24h change' },
 ];
 
+const SCOPE_LABELS: Record<SortScope, string> = {
+  market: 'across the whole market',
+  page: 'within this page only',
+  results: 'within search results',
+};
+
 const DIRECTION_OPTIONS: Array<{ value: SortDirection; label: string; hint: string }> = [
   { value: 'desc', label: 'High → low', hint: 'Sort descending' },
   { value: 'asc', label: 'Low → high', hint: 'Sort ascending' },
@@ -93,7 +99,7 @@ function SortControls({
         }
         className="text-xs text-slate-500 dark:text-slate-400"
       >
-        {scope === 'market' ? 'across the whole market' : 'within this page only'}
+        {SCOPE_LABELS[scope]}
       </p>
     </div>
   );

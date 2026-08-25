@@ -208,6 +208,8 @@ export interface SearchFlowState {
   searchQueries: string[];
   /** Each `ids=` hydration request, as the list of ids asked for. */
   hydratedIds: string[][];
+  /** The `order` sent on each hydration request. */
+  hydrationOrders: string[];
   /** Plain paged market requests (no `ids`), as page numbers. */
   marketPages: number[];
 }
@@ -223,7 +225,12 @@ export async function mockSearchFlow(
   page: Page,
   options?: { searchStatus?: number; delayMs?: number }
 ): Promise<SearchFlowState> {
-  const state: SearchFlowState = { searchQueries: [], hydratedIds: [], marketPages: [] };
+  const state: SearchFlowState = {
+    searchQueries: [],
+    hydratedIds: [],
+    hydrationOrders: [],
+    marketPages: [],
+  };
 
   await page.route(SEARCH_ROUTE, async (route) => {
     const query = new URL(route.request().url()).searchParams.get('query') ?? '';
@@ -262,10 +269,12 @@ export async function mockSearchFlow(
     if (ids !== null) {
       const wanted = ids.split(',').filter(Boolean);
       state.hydratedIds.push(wanted);
+      state.hydrationOrders.push(params.get('order') ?? '');
 
       const hydrated = searchIndex
         .filter((coin) => wanted.includes(coin.id))
         .sort((a, b) => b.market_cap - a.market_cap);
+
 
       return route.fulfill({
         status: 200,

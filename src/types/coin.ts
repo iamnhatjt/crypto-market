@@ -45,8 +45,12 @@ export type SortField = 'market_cap' | 'price' | 'change';
  */
 export type MarketsOrder = 'market_cap_desc' | 'market_cap_asc';
 
-/** Whether a sort is resolved by the API or locally over the loaded page. */
-export type SortScope = 'market' | 'page';
+/**
+ * Where a sort applies: resolved by the API across every coin ('market'),
+ * locally over the loaded page ('page'), or locally over search results
+ * ('results').
+ */
+export type SortScope = 'market' | 'page' | 'results';
 
 export type SortDirection = 'asc' | 'desc';
 

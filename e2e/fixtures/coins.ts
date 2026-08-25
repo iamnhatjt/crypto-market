@@ -26,6 +26,8 @@ export interface MarketCoinFixture {
    */
   market_cap_rank: number | null;
   price_change_percentage_24h: number | null;
+  /** Optional in fixtures; nullable in the live API. */
+  total_volume?: number | null;
 }
 
 /** Inline SVG icon so tests never depend on remote image hosts. */
